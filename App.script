@@ -1,40 +1,61 @@
-function doGet(e) {
-  return setCORSHeaders(doPost(e));  // Handle GET the same as POST
-}
+const SPREADSHEET_ID = '1YmrKxyWkwIdCs5cJJoLgslQ0fxhqMRI9EQVUIqBJGS4';
+const GOOGLE_SCRIPT_SECRET = "SWEETME2025Shawn";
 
 function doPost(e) {
-  const SECRET = 'SWEETME2025Shawn';
-  
-  // Handle both POST and GET parameters
-  let data = {};
-  if (e.postData && e.postData.contents) {
+  // Check for the secret to prevent unauthorized access
+  let data;
+  try {
     data = JSON.parse(e.postData.contents);
-  } else if (e.parameter) {
-    data = e.parameter;
-  }
-  
-  if (data.secret !== SECRET) {
-    return setCORSHeaders(ContentService.createTextOutput('forbidden').setMimeType(ContentService.MimeType.TEXT));
+    if (data.secret !== GOOGLE_SCRIPT_SECRET) {
+      return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Unauthorized'})).setMimeType(ContentService.MimeType.JSON));
+    }
+  } catch (err) {
+    return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Invalid data format'})).setMimeType(ContentService.MimeType.JSON));
   }
 
-  const ss = SpreadsheetApp.openById('1YmrKxyWkwIdCs5cJJoLgslQ0fxhqMRI9EQVUIqBJGS4');
-  
-  if (data.action === 'getSheetNames') {
-    const sheetNames = ss.getSheets().map(sheet => sheet.getName());
-    return setCORSHeaders(ContentService
-      .createTextOutput(JSON.stringify({sheetNames: sheetNames}))
-      .setMimeType(ContentService.MimeType.JSON));
+  const action = data.action;
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  try {
+    switch (action) {
+      case 'getSheetNames':
+        return getSheetNames(spreadsheet);
+      case 'getSheetContent':
+        const sheetName = data.sheetName;
+        return getSheetContent(spreadsheet, sheetName);
+      case 'appendData':
+        const values = data.values;
+        if (!values || values.length === 0) {
+          return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({error: 'No data provided'})).setMimeType(ContentService.MimeType.JSON));
+        }
+        return appendData(spreadsheet, values);
+      default:
+        return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Invalid action'})).setMimeType(ContentService.MimeType.JSON));
+    }
+  } catch (err) {
+    return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: err.message})).setMimeType(ContentService.MimeType.JSON));
   }
-  
-  // Handle data export...
-  if (!data.values || data.values.length === 0) {
-    return ContentService
-      .createTextOutput(JSON.stringify({error: 'No data provided'}))
-      .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getSheetNames(spreadsheet) {
+  const sheets = spreadsheet.getSheets();
+  const sheetNames = sheets.map(sheet => sheet.getName());
+  return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: true, sheetNames: sheetNames})).setMimeType(ContentService.MimeType.JSON));
+}
+
+function getSheetContent(spreadsheet, sheetName) {
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: `Sheet '${sheetName}' not found`})).setMimeType(ContentService.MimeType.JSON));
   }
-  
+  const data = sheet.getDataRange().getValues();
+  return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: true, data: data})).setMimeType(ContentService.MimeType.JSON));
+}
+
+// Existing function to append data, modified to fit the new doPost structure
+function appendData(spreadsheet, values) {
   const baseDate = new Date().toISOString().slice(0,10);
-  const existingSheets = ss.getSheets().map(sheet => sheet.getName());
+  const existingSheets = spreadsheet.getSheets().map(sheet => sheet.getName());
   
   let sheetName = baseDate;
   let counter = 1;
@@ -44,23 +65,16 @@ function doPost(e) {
     counter++;
   }
   
-  const sheet = ss.insertSheet(sheetName, 0);
-  const values = data.values;
+  const sheet = spreadsheet.insertSheet(sheetName, 0);
   
   if (values.length) {
     sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
   }
 
-  return setCORSHeaders(ContentService
-    .createTextOutput(JSON.stringify({ok: true, sheetName: sheet.getName()}))
-    .setMimeType(ContentService.MimeType.JSON));
+  return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: true, sheetName: sheet.getName()})).setMimeType(ContentService.MimeType.JSON));
 }
 
 function setCORSHeaders(response) {
-  response.setHeaders({
-    'Access-Control-Allow-Origin': 'https://galygious.github.io',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
-  });
+  response.setHeaders({"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type"});
   return response;
 }

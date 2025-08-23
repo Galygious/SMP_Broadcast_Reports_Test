@@ -142,9 +142,13 @@
                     method: 'POST',
                     url: GOOGLE_APPS_SCRIPT_URL,
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'text/plain;charset=utf-8'
                     },
-                    data: JSON.stringify(payload),
+                    data: JSON.stringify({
+                        secret: GOOGLE_SCRIPT_SECRET,
+                        action: 'appendData',
+                        values: values
+                    }),
                     onload: (response) => {
                         if (response.status === 200) {
                             try {

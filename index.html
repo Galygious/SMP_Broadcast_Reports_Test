@@ -60,82 +60,82 @@
         <h1>Google Sheets API Test</h1>
         <p>Testing Google Apps Script with "Anyone" access.</p>
         
-        <button onclick="testGetSheetNames()">Test Get Sheet Names</button>
-        <button onclick="testGetRequest()">Test GET Request</button>
+        <button onclick="fetchSheetNames()">Get All Sheet Names</button>
+
+        <br><br>
+
+        <label for="sheetNameInput">Enter Sheet Name:</label>
+        <input type="text" id="sheetNameInput" placeholder="e.g., Sheet1">
+        <button onclick="fetchSheetContent(document.getElementById('sheetNameInput').value)">Get Sheet Content</button>
         
         <div id="result"></div>
     </div>
 
     <script>
         const scriptUrl = 'https://script.google.com/macros/s/AKfycbw2w0x5sxPHdkHEE-JYrb-qeTWFn9QJAN4WhUKetTqvBSXjyFhgtVdPyUxRniZsP9j4/exec';
-        async function testGetSheetNames() {
+        
+        async function fetchSheetNames() {
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = 'Testing POST request...';
+            resultDiv.innerHTML = 'Fetching sheet names...';
             resultDiv.className = 'info';
-            
+
             try {
+                const payload = {
+                    secret: 'SWEETME2025Shawn',
+                    action: 'getSheetNames'
+                };
+
                 const response = await fetch(scriptUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        secret: 'SWEETME2025Shawn',
-                        action: 'getSheetNames'
-                    })
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
                 });
-                
-                console.log('Response status:', response.status);
-                console.log('Response headers:', [...response.headers.entries()]);
-                
-                const text = await response.text();
-                console.log('Response text:', text);
-                
-                try {
-                    const data = JSON.parse(text);
+
+                const data = await response.json();
+
+                if (response.ok && data.ok) {
                     resultDiv.className = 'success';
-                    resultDiv.innerHTML = `✅ POST Success!\n\nResponse:\n${JSON.stringify(data, null, 2)}`;
-                } catch (e) {
-                    resultDiv.className = 'error';
-                    resultDiv.innerHTML = `❌ Failed to parse JSON.\n\nRaw response:\n${text}`;
+                    resultDiv.innerHTML = `✅ Sheet names fetched successfully!\n\n${data.sheetNames.join('\n')}`;
+                } else {
+                    throw new Error(data.error || 'Failed to fetch sheet names');
                 }
-                
+
             } catch (error) {
-                console.error('Error:', error);
                 resultDiv.className = 'error';
-                resultDiv.innerHTML = `❌ POST Error!\n\n${error.message}`;
+                resultDiv.innerHTML = `❌ Error fetching sheet names: ${error.message}`;
             }
         }
 
-        async function testGetRequest() {
+        async function fetchSheetContent(sheetName) {
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = 'Testing GET request...';
+            resultDiv.innerHTML = `Fetching content for '${sheetName}'...`;
             resultDiv.className = 'info';
-            
+
             try {
-                const url = scriptUrl + '?secret=SWEETME2025Shawn&action=getSheetNames';
-                
-                const response = await fetch(url, {
-                    method: 'GET'
+                const payload = {
+                    secret: 'SWEETME2025Shawn',
+                    action: 'getSheetContent',
+                    sheetName: sheetName
+                };
+
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
                 });
-                
-                console.log('GET Response status:', response.status);
-                const text = await response.text();
-                console.log('GET Response text:', text);
-                
-                try {
-                    const data = JSON.parse(text);
+
+                const data = await response.json();
+
+                if (response.ok && data.ok) {
                     resultDiv.className = 'success';
-                    resultDiv.innerHTML = `✅ GET Success!\n\nResponse:\n${JSON.stringify(data, null, 2)}`;
-                } catch (e) {
-                    resultDiv.className = 'error';
-                    resultDiv.innerHTML = `❌ GET - Failed to parse JSON.\n\nRaw response:\n${text}`;
+                    resultDiv.innerHTML = `✅ Content for '${sheetName}' fetched successfully!\n\n${JSON.stringify(data.data, null, 2)}`;
+                } else {
+                    throw new Error(data.error || `Failed to fetch content for '${sheetName}'`);
                 }
-                
+
             } catch (error) {
-                console.error('GET Error:', error);
                 resultDiv.className = 'error';
-                resultDiv.innerHTML = `❌ GET Error!\n\n${error.message}`;
+                resultDiv.innerHTML = `❌ Error fetching sheet content: ${error.message}`;
             }
         }
     </script>
