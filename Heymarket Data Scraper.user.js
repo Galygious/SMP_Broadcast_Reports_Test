@@ -22,7 +22,7 @@
     const MAX_CONVERSATION_MESSAGES = 20;
 
     // Google Apps Script configuration
-    const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw2w0x5sxPHdkHEE-JYrb-qeTWFn9QJAN4WhUKetTqvBSXjyFhgtVdPyUxRniZsP9j4/exec";
+    const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzfOem8exv5LUzaHPHjBbizCFEl4Mx700YLg4XgWwIqsOP1BwUMvyxdim2w2iEdMvYF/exec";
     const GOOGLE_SCRIPT_SECRET = "SWEETME2025Shawn";
 
     async function checkIfTodayAlreadyExported() {
