@@ -1,5 +1,5 @@
 function doGet(e) {
-  return doPost(e);  // Handle GET the same as POST
+  return setCORSHeaders(doPost(e));  // Handle GET the same as POST
 }
 
 function doPost(e) {
@@ -14,16 +14,16 @@ function doPost(e) {
   }
   
   if (data.secret !== SECRET) {
-    return ContentService.createTextOutput('forbidden').setMimeType(ContentService.MimeType.TEXT);
+    return setCORSHeaders(ContentService.createTextOutput('forbidden').setMimeType(ContentService.MimeType.TEXT));
   }
 
   const ss = SpreadsheetApp.openById('1YmrKxyWkwIdCs5cJJoLgslQ0fxhqMRI9EQVUIqBJGS4');
   
   if (data.action === 'getSheetNames') {
     const sheetNames = ss.getSheets().map(sheet => sheet.getName());
-    return ContentService
+    return setCORSHeaders(ContentService
       .createTextOutput(JSON.stringify({sheetNames: sheetNames}))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON));
   }
   
   // Handle data export...
@@ -51,7 +51,16 @@ function doPost(e) {
     sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
   }
 
-  return ContentService
+  return setCORSHeaders(ContentService
     .createTextOutput(JSON.stringify({ok: true, sheetName: sheet.getName()}))
-    .setMimeType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.JSON));
+}
+
+function setCORSHeaders(response) {
+  response.setHeaders({
+    'Access-Control-Allow-Origin': 'https://galygious.github.io',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  });
+  return response;
 }
