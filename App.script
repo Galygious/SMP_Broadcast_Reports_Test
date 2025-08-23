@@ -1,0 +1,57 @@
+function doGet(e) {
+  return doPost(e);  // Handle GET the same as POST
+}
+
+function doPost(e) {
+  const SECRET = 'SWEETME2025Shawn';
+  
+  // Handle both POST and GET parameters
+  let data = {};
+  if (e.postData && e.postData.contents) {
+    data = JSON.parse(e.postData.contents);
+  } else if (e.parameter) {
+    data = e.parameter;
+  }
+  
+  if (data.secret !== SECRET) {
+    return ContentService.createTextOutput('forbidden').setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  const ss = SpreadsheetApp.openById('1YmrKxyWkwIdCs5cJJoLgslQ0fxhqMRI9EQVUIqBJGS4');
+  
+  if (data.action === 'getSheetNames') {
+    const sheetNames = ss.getSheets().map(sheet => sheet.getName());
+    return ContentService
+      .createTextOutput(JSON.stringify({sheetNames: sheetNames}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  // Handle data export...
+  if (!data.values || data.values.length === 0) {
+    return ContentService
+      .createTextOutput(JSON.stringify({error: 'No data provided'}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  const baseDate = new Date().toISOString().slice(0,10);
+  const existingSheets = ss.getSheets().map(sheet => sheet.getName());
+  
+  let sheetName = baseDate;
+  let counter = 1;
+  
+  while (existingSheets.includes(sheetName)) {
+    sheetName = `${baseDate}_${counter}`;
+    counter++;
+  }
+  
+  const sheet = ss.insertSheet(sheetName, 0);
+  const values = data.values;
+  
+  if (values.length) {
+    sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ok: true, sheetName: sheet.getName()}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
