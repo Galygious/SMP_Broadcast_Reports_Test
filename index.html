@@ -67,13 +67,14 @@
     </div>
 
     <script>
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbw2w0x5sxPHdkHEE-JYrb-qeTWFn9QJAN4WhUKetTqvBSXjyFhgtVdPyUxRniZsP9j4/exec';
         async function testGetSheetNames() {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = 'Testing POST request...';
             resultDiv.className = 'info';
             
             try {
-                const response = await fetch('https://script.google.com/macros/s/AKfycbwT8q4H6wVmHuk5DlZNZosIfF1BR5mDJPEpo6liRIa3u8m3H5gsVaMv5lyo5-NsIrTq/exec', {
+                const response = await fetch(scriptUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -112,7 +113,7 @@
             resultDiv.className = 'info';
             
             try {
-                const url = 'https://script.google.com/macros/s/AKfycbw2w0x5sxPHdkHEE-JYrb-qeTWFn9QJAN4WhUKetTqvBSXjyFhgtVdPyUxRniZsP9j4/exec';
+                const url = scriptUrl + '?secret=SWEETME2025Shawn&action=getSheetNames';
                 
                 const response = await fetch(url, {
                     method: 'GET'
