@@ -72,7 +72,8 @@
     </div>
 
     <script>
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbzfOem8exv5LUzaHPHjBbizCFEl4Mx700YLg4XgWwIqsOP1BwUMvyxdim2w2iEdMvYF/exec';
+        const Google_Script_ID = 'AKfycbzfOem8exv5LUzaHPHjBbizCFEl4Mx700YLg4XgWwIqsOP1BwUMvyxdim2w2iEdMvYF';
+        const scriptUrl = 'https://script.google.com/macros/s/' + Google_Script_ID + '/exec';
         
         async function fetchSheetNames() {
             const resultDiv = document.getElementById('result');

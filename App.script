@@ -1,80 +1,9 @@
 const SPREADSHEET_ID = '1YmrKxyWkwIdCs5cJJoLgslQ0fxhqMRI9EQVUIqBJGS4';
 const GOOGLE_SCRIPT_SECRET = "SWEETME2025Shawn";
 
-function doPost(e) {
-  // Check for the secret to prevent unauthorized access
-  let data;
-  try {
-    data = JSON.parse(e.postData.contents);
-    if (data.secret !== GOOGLE_SCRIPT_SECRET) {
-      return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Unauthorized'})).setMimeType(ContentService.MimeType.JSON));
-    }
-  } catch (err) {
-    return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Invalid data format'})).setMimeType(ContentService.MimeType.JSON));
-  }
-
-  const action = data.action;
+function getSheetNames(spreadsheetId) {
   const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-
-  try {
-    switch (action) {
-      case 'getSheetNames':
-        return getSheetNames(spreadsheet);
-      case 'getSheetContent':
-        const sheetName = data.sheetName;
-        return getSheetContent(spreadsheet, sheetName);
-      case 'appendData':
-        const values = data.values;
-        if (!values || values.length === 0) {
-          return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({error: 'No data provided'})).setMimeType(ContentService.MimeType.JSON));
-        }
-        return appendData(spreadsheet, values);
-      default:
-        return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Invalid action'})).setMimeType(ContentService.MimeType.JSON));
-    }
-  } catch (err) {
-    return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: err.message})).setMimeType(ContentService.MimeType.JSON));
-  }
-}
-
-function getSheetNames(spreadsheet) {
   const sheets = spreadsheet.getSheets();
   const sheetNames = sheets.map(sheet => sheet.getName());
-  return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: true, sheetNames: sheetNames})).setMimeType(ContentService.MimeType.JSON));
-}
-
-function getSheetContent(spreadsheet, sheetName) {
-  const sheet = spreadsheet.getSheetByName(sheetName);
-  if (!sheet) {
-    return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: false, error: `Sheet '${sheetName}' not found`})).setMimeType(ContentService.MimeType.JSON));
-  }
-  const data = sheet.getDataRange().getValues();
-  return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: true, data: data})).setMimeType(ContentService.MimeType.JSON));
-}
-
-// Existing function to append data, modified to fit the new doPost structure
-function appendData(spreadsheet, values) {
-  const baseDate = new Date().toISOString().slice(0,10);
-  const existingSheets = spreadsheet.getSheets().map(sheet => sheet.getName());
-  
-  let sheetName = baseDate;
-  let counter = 1;
-  
-  while (existingSheets.includes(sheetName)) {
-    sheetName = `${baseDate}_${counter}`;
-    counter++;
-  }
-  
-  const sheet = spreadsheet.insertSheet(sheetName, 0);
-  
-  if (values.length) {
-    sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
-  }
-
-  return setCORSHeaders(ContentService.createTextOutput(JSON.stringify({ok: true, sheetName: sheet.getName()})).setMimeType(ContentService.MimeType.JSON));
-}
-
-function setCORSHeaders(response) {
-  response.setHeaders({"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type"});
-  return response;
+  return sheetNames;
 }

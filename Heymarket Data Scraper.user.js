@@ -20,9 +20,10 @@
     const SECURITY_TOKEN = "m3mdHdowtqQtLP6ujj-qtPhY4a5usgixARwQEf7IYbI=";
     const TEAM_ID = 64149;
     const MAX_CONVERSATION_MESSAGES = 20;
+    const GOOGLE_SCRIPT_ID = "AKfycbzfOem8exv5LUzaHPHjBbizCFEl4Mx700YLg4XgWwIqsOP1BwUMvyxdim2w2iEdMvYF";
 
     // Google Apps Script configuration
-    const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzfOem8exv5LUzaHPHjBbizCFEl4Mx700YLg4XgWwIqsOP1BwUMvyxdim2w2iEdMvYF/exec";
+    const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec";
     const GOOGLE_SCRIPT_SECRET = "SWEETME2025Shawn";
 
     async function checkIfTodayAlreadyExported() {
