@@ -413,6 +413,68 @@
       display: none;
     }
 
+    /* Date input enhancements */
+    .date-validation-message {
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-top: 5px;
+      font-size: 0.85rem;
+      display: inline-block;
+    }
+
+    .date-validation-message.valid {
+      background: #f6ffed;
+      border: 1px solid #b7eb8f;
+      color: #389e0d;
+    }
+
+    .date-validation-message.invalid {
+      background: #fff2f0;
+      border: 1px solid #ffccc7;
+      color: #a8071a;
+    }
+
+    .date-validation-message.info {
+      background: #e6f7ff;
+      border: 1px solid #91d5ff;
+      color: #0958d9;
+    }
+
+    .available-dates-list {
+      background: #f8f9ff;
+      border: 1px solid #e1e5f2;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .available-dates-list h4 {
+      margin: 0 0 8px 0;
+      color: #667eea;
+      font-size: 0.9rem;
+    }
+
+    .available-dates-list .date-item {
+      display: inline-block;
+      background: white;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin: 2px;
+      font-size: 0.8rem;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .available-dates-list .date-item:hover {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+
     @media (max-width: 768px) {
       .container {
         padding: 10px;
@@ -458,6 +520,7 @@
         <div style="margin-bottom: 15px;">
           <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
           <input type="date" id="dateInput" onchange="onDateSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-right: 10px;">
+          <div id="availableDatesInfo" style="margin-top: 8px; font-size: 0.9rem; color: #666;"></div>
         </div>
         <div>
           <label for="dateDropdown" style="display: block; margin-bottom: 5px; font-weight: 600;">Or Select from Available Sheets:</label>
@@ -514,6 +577,7 @@
 
     let verifiedSecret = null;
     let availableSheets = [];
+    let availableDates = [];
     let rawData = [];
     let processedData = {
       noResponse: {},
@@ -541,6 +605,10 @@
           verifiedSecret = password;
           availableSheets = data.sheetNames;
 
+          // Extract available dates from sheet names
+          extractAvailableDates();
+          setupDateValidation();
+
           resultDiv.className = "success";
           resultDiv.textContent = "✅ Password verified! Found " + availableSheets.length + " sheets.";
 
@@ -567,14 +635,24 @@
 
     async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
-      if (!selectedDate) return;
+      if (!selectedDate) {
+        updateDateValidationMessage("", "");
+        return;
+      }
+
+      // Check if the selected date has available data
+      if (!availableDates.includes(selectedDate)) {
+        updateDateValidationMessage("❌ No data available for this date. Please select from available dates below.", "invalid");
+        return;
+      }
+
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
       if (sheetName) {
+        updateDateValidationMessage("✅ Data found! Loading...", "valid");
         document.getElementById("dateDropdown").value = sheetName;
         await fetchSheetContent(sheetName);
       } else {
-        document.getElementById("result").className = "error";
-        document.getElementById("result").textContent = "❌ No sheet found for " + selectedDate;
+        updateDateValidationMessage("❌ No sheet found for " + selectedDate, "invalid");
       }
     }
 
@@ -656,21 +734,21 @@
         if (!line) continue;
         
         try {
-          const values = parseCSVLine(line);
+        const values = parseCSVLine(line);
           if (values.length < headers.length) {
             console.warn(`Row ${i}: Expected ${headers.length} columns, got ${values.length}`);
             continue;
           }
           
-          const record = {};
+        const record = {};
           headers.forEach((header, index) => {
             record[header] = values[index] || '';
           });
           
           // Extract message columns
-          record.messages = [];
+        record.messages = [];
           for (let j = 0; j < headers.length; j++) {
-            if (headers[j].startsWith('Message ')) {
+          if (headers[j].startsWith('Message ')) {
               const messageText = values[j] || '';
               if (messageText.trim()) {
                 record.messages.push(messageText.trim());
@@ -1026,6 +1104,95 @@
         const icon = messages.previousElementSibling.querySelector('.toggle-icon');
         icon.classList.remove('rotated');
       });
+    }
+
+    // Date validation helper functions
+    function extractAvailableDates() {
+      availableDates = [];
+      const datePattern = /^(\d{4}-\d{2}-\d{2})/;
+      
+      availableSheets.forEach(sheetName => {
+        const match = sheetName.match(datePattern);
+        if (match) {
+          const date = match[1];
+          if (!availableDates.includes(date)) {
+            availableDates.push(date);
+          }
+        }
+      });
+      
+      // Sort dates in descending order (newest first)
+      availableDates.sort((a, b) => new Date(b) - new Date(a));
+      console.log("Available dates extracted:", availableDates);
+    }
+
+    function setupDateValidation() {
+      const dateInput = document.getElementById("dateInput");
+      const infoDiv = document.getElementById("availableDatesInfo");
+      
+      // Set min and max dates based on available data
+      if (availableDates.length > 0) {
+        const minDate = availableDates[availableDates.length - 1]; // oldest
+        const maxDate = availableDates[0]; // newest
+        dateInput.min = minDate;
+        dateInput.max = maxDate;
+      }
+
+      // Show available dates
+      displayAvailableDates();
+    }
+
+    function displayAvailableDates() {
+      const infoDiv = document.getElementById("availableDatesInfo");
+      
+      if (availableDates.length === 0) {
+        infoDiv.innerHTML = '<div class="date-validation-message info">No dates available</div>';
+        return;
+      }
+
+      let html = '<div class="available-dates-list">';
+      html += '<h4>📅 Available Dates (click to select):</h4>';
+      
+      availableDates.forEach(date => {
+        const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        html += `<span class="date-item" onclick="selectDate('${date}')">${formattedDate}</span>`;
+      });
+      
+      html += '</div>';
+      infoDiv.innerHTML = html;
+    }
+
+    function selectDate(date) {
+      const dateInput = document.getElementById("dateInput");
+      dateInput.value = date;
+      onDateSelected();
+    }
+
+    function updateDateValidationMessage(message, type) {
+      const infoDiv = document.getElementById("availableDatesInfo");
+      const existingList = infoDiv.querySelector('.available-dates-list');
+      
+      // Remove any existing validation message
+      const existingMessage = infoDiv.querySelector('.date-validation-message');
+      if (existingMessage) {
+        existingMessage.remove();
+      }
+      
+      if (message) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `date-validation-message ${type}`;
+        messageDiv.textContent = message;
+        
+        if (existingList) {
+          infoDiv.insertBefore(messageDiv, existingList);
+        } else {
+          infoDiv.appendChild(messageDiv);
+        }
+      }
     }
   </script>
 </body>
