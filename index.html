@@ -563,6 +563,7 @@
 
                      // Extract available dates from sheet names
            extractAvailableDates();
+           setupDateLimits();
 
           resultDiv.className = "success";
           resultDiv.textContent = "✅ Password verified! Found " + availableSheets.length + " sheets.";
@@ -586,17 +587,25 @@
       }
     }
 
-    async function onDateSelected() {
+        async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
       if (!selectedDate) return;
+
+      // Check if the selected date is in our available dates
+      if (!availableDates.includes(selectedDate)) {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "error";
+        resultDiv.textContent = `❌ No data available for ${selectedDate}. Please select a date with available data.`;
+        return;
+      }
 
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
       if (sheetName) {
         await fetchSheetContent(sheetName);
       } else {
-         const resultDiv = document.getElementById("result");
-         resultDiv.className = "error";
-         resultDiv.textContent = "❌ No sheet found for " + selectedDate;
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "error";
+        resultDiv.textContent = "❌ No sheet found for " + selectedDate;
       }
     }
 
@@ -1068,6 +1077,19 @@
       // Sort dates in descending order (newest first)
       availableDates.sort((a, b) => new Date(b) - new Date(a));
       console.log("Available dates extracted:", availableDates);
+    }
+
+    function setupDateLimits() {
+      const dateInput = document.getElementById("dateInput");
+      
+      // Set min and max dates based on available data
+      if (availableDates.length > 0) {
+        const minDate = availableDates[availableDates.length - 1]; // oldest
+        const maxDate = availableDates[0]; // newest
+        dateInput.min = minDate;
+        dateInput.max = maxDate;
+        console.log(`Date picker limited to: ${minDate} to ${maxDate}`);
+      }
     }
 
     
