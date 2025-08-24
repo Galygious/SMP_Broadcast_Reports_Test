@@ -1,9 +1,0 @@
-const SPREADSHEET_ID = '1YmrKxyWkwIdCs5cJJoLgslQ0fxhqMRI9EQVUIqBJGS4';
-const GOOGLE_SCRIPT_SECRET = "SWEETME2025Shawn";
-
-function getSheetNames(spreadsheetId) {
-  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheets = spreadsheet.getSheets();
-  const sheetNames = sheets.map(sheet => sheet.getName());
-  return sheetNames;
-}

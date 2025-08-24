@@ -2,6 +2,10 @@
 response.txt
 stats.html
 
+# Ignore userscript and backend files
+Heymarket Data Scraper.user.js
+App.script
+
 # Common IDE files
 .vscode/
 .idea/
