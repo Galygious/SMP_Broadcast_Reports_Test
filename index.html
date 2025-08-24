@@ -469,8 +469,8 @@
         <div class="upload-icon">🔐</div>
         <div class="upload-text">Enter Password to Access Google Sheets Data</div>
         <div class="upload-subtext">Connect to Heymarket campaign reports</div>
-        <input type="password" id="passwordInput" placeholder="Enter password" style="margin: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; width: 250px;">
-        <button class="btn" onclick="verifyPassword()">Verify Access</button>
+        <input type="password" id="passwordInput" placeholder="Enter password" onkeypress="handlePasswordKeyPress(event)" aria-label="Password for accessing Google Sheets data" style="margin: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; width: 250px;">
+        <button class="btn" onclick="verifyPassword()" aria-label="Verify password and access data">Verify Access</button>
       </div>
     </div>
 
@@ -480,7 +480,7 @@
         <h3 style="margin-bottom: 20px; color: #667eea;">Select Campaign Date</h3>
                  <div style="margin-bottom: 15px;">
            <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
-           <input type="date" id="dateInput" onchange="onDateSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+           <input type="date" id="dateInput" onchange="onDateSelected()" aria-label="Select campaign date to view analysis" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
          </div>
       </div>
     </div>
@@ -541,9 +541,22 @@
       stopResponses: {}
     };
 
+    function handlePasswordKeyPress(event) {
+      if (event.key === 'Enter') {
+        verifyPassword();
+      }
+    }
+
     async function verifyPassword() {
       const password = document.getElementById("passwordInput").value.trim();
       const resultDiv = document.getElementById("result");
+      
+      if (!password) {
+        resultDiv.className = "error";
+        resultDiv.textContent = "❌ Please enter a password";
+        return;
+      }
+      
       resultDiv.textContent = "Verifying password...";
       resultDiv.className = "info";
 
@@ -583,7 +596,7 @@
         }
       } catch (err) {
         resultDiv.className = "error";
-        resultDiv.textContent = "❌ Error verifying password: " + err.message;
+        resultDiv.innerHTML = `❌ Error verifying password: ${err.message}<br><button class="btn" style="margin-top: 10px;" onclick="verifyPassword()">Retry</button>`;
       }
     }
 
@@ -655,7 +668,7 @@
         }
       } catch (err) {
         resultDiv.className = "error";
-        resultDiv.textContent = "❌ Error fetching content: " + err.message;
+        resultDiv.innerHTML = `❌ Error fetching content: ${err.message}<br><button class="btn" style="margin-top: 10px;" onclick="fetchSheetContent('${sheetName}')">Retry</button>`;
       } finally {
         hideLoading();
       }
