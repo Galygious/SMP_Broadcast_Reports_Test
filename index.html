@@ -16,30 +16,68 @@
     .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
     .header { text-align: center; margin-bottom: 30px; color: white; }
     .header h1 { font-size: 2.5rem; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
-    .header p { font-size: 1.2rem; }
+    .header p { font-size: 1.1rem; opacity: 0.9; }
+
     .card {
       background: white; padding: 20px; border-radius: 10px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 20px;
     }
-    #result {
-      margin-top: 20px; padding: 15px; border-radius: 4px;
-      white-space: pre-wrap; font-family: monospace;
-    }
-    .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-    .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
     .hidden { display: none; }
+
+    /* --- reuse your original analysis styling --- */
+    .analysis-section {
+      display: none;
+      background: white;
+      border-radius: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .section-header {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      padding: 20px;
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+    .section-content { padding: 25px; }
+    .stats-table table { width: 100%; border-collapse: collapse; }
+    .stats-table th, .stats-table td {
+      padding: 15px 20px; text-align: left;
+      border-bottom: 1px solid #e1e5f2;
+    }
+    .stats-table th { background: #f8f9ff; font-weight: 600; color: #667eea; }
+    .stats-table td { color: #333; }
+    .stats-table .number-cell { text-align: right; font-weight: 600; color: #667eea; }
+    .stats-table .total-row { background: #f0f2ff; font-weight: 700; border-top: 2px solid #667eea; }
+    .brand-section { margin-bottom: 20px; border: 1px solid #e1e5f2; border-radius: 10px; overflow: hidden; }
+    .brand-header { background: #f8f9ff; padding: 15px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .brand-name { font-weight: 600; color: #667eea; }
+    .brand-count { background: #667eea; color: white; padding: 5px 12px; border-radius: 20px; }
+    .brand-content { display: none; padding: 20px; background: #fafbff; }
+    .record-item { background: white; border: 1px solid #e1e5f2; border-radius: 8px; margin-bottom: 10px; }
+    .record-header { padding: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .record-info { display: flex; gap: 20px; align-items: center; }
+    .record-name { font-weight: 600; }
+    .record-phone { font-family: monospace; color: #666; }
+    .record-time { color: #999; font-size: 0.9rem; }
+    .record-messages { display: none; padding: 20px; background: #f8f9ff; border-top: 1px solid #e1e5f2; }
+    .message { background: white; border-radius: 8px; padding: 12px 15px; margin-bottom: 10px; border-left: 4px solid #667eea; }
+    .message.outgoing { border-left-color: #764ba2; background: #f0f2ff; }
+    .message.incoming { border-left-color: #52c41a; background: #f6ffed; }
+    .error { background: #fff2f0; border: 1px solid #ffccc7; color: #a8071a; padding: 15px; border-radius: 8px; margin: 10px 0; }
+    .success { background: #f6ffed; border: 1px solid #b7eb8f; color: #389e0d; padding: 15px; border-radius: 8px; margin: 10px 0; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>📊 Campaign Analysis</h1>
-      <p>View reports directly from Google Sheets</p>
+      <h1>📊 Heymarket Campaign Analysis</h1>
+      <p>Select a sheet date to analyze campaign performance</p>
     </div>
 
+    <!-- Step 1: Password -->
     <div class="card">
-      <!-- Step 1: Password -->
       <label for="passwordInput">Enter Password:</label>
       <input type="password" id="passwordInput" placeholder="Enter password">
       <button onclick="verifyPassword()">Verify</button>
@@ -52,8 +90,19 @@
       <select id="dateDropdown" onchange="onDropdownSelected()"></select>
     </div>
 
-    <!-- Where parseCSV results show -->
-    <div id="result"></div>
+    <!-- Analysis sections -->
+    <div id="noResponseSection" class="analysis-section">
+      <div class="section-header">📈 No Response Tallies by Brand</div>
+      <div class="section-content"><div id="noResponseStats" class="stats-table"></div></div>
+    </div>
+
+    <div id="responseSection" class="analysis-section">
+      <div class="section-header">💬 Response Analysis by Brand - <span id="totalResponsesCount">0 Total Responses</span></div>
+      <div class="section-content">
+        <div id="stopResponsesStats" class="stats-grid"></div>
+        <div id="responseBrands"></div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -62,44 +111,30 @@
 
     let verifiedSecret = null;
     let availableSheets = [];
+    let rawData = [];
+    let processedData = {};
 
     async function verifyPassword() {
       const password = document.getElementById("passwordInput").value.trim();
-      const resultDiv = document.getElementById("result");
-      resultDiv.textContent = "Verifying password...";
-      resultDiv.className = "info";
-
       try {
         const payload = { secret: password, action: "getSheetNames" };
         const response = await fetch(scriptUrl, {
           method: "POST",
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload),
-          redirect: "follow"
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
         });
         const data = await response.json();
-
         if (data.ok) {
           verifiedSecret = password;
           availableSheets = data.sheetNames;
-
-          resultDiv.className = "success";
-          resultDiv.textContent = "✅ Password verified! Found " + availableSheets.length + " sheets.";
-
           const dropdown = document.getElementById("dateDropdown");
           dropdown.innerHTML = "<option value=''>-- Select a date --</option>";
           availableSheets.forEach(name => {
             dropdown.innerHTML += `<option value="${name}">${name}</option>`;
           });
-
           document.getElementById("dateSelector").classList.remove("hidden");
-        } else {
-          throw new Error(data.error || "Invalid password");
-        }
-      } catch (err) {
-        resultDiv.className = "error";
-        resultDiv.textContent = "❌ Error verifying password: " + err.message;
-      }
+        } else alert("Invalid password");
+      } catch (err) { alert("Error: " + err.message); }
     }
 
     async function onDropdownSelected() {
@@ -109,22 +144,14 @@
 
     async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
-      if (!selectedDate) return;
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
       if (sheetName) {
         document.getElementById("dateDropdown").value = sheetName;
         await fetchSheetContent(sheetName);
-      } else {
-        document.getElementById("result").className = "error";
-        document.getElementById("result").textContent = "❌ No sheet found for " + selectedDate;
-      }
+      } else alert("No sheet found for " + selectedDate);
     }
 
     async function fetchSheetContent(sheetName) {
-      const resultDiv = document.getElementById("result");
-      resultDiv.textContent = "Fetching content for " + sheetName + "...";
-      resultDiv.className = "info";
-
       try {
         const payload = { secret: verifiedSecret, action: "getSheetContent", sheetName };
         const response = await fetch(scriptUrl, {
@@ -133,87 +160,105 @@
           body: JSON.stringify(payload)
         });
         const data = await response.json();
-
         if (data.ok) {
-          // Convert 2D array from Sheets into CSV string
           const rows = data.data;
           const csvContent = rows.map(r =>
             r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(",")
           ).join("\n");
-
-          // Reuse your existing CSV parsing pipeline
           parseCSV(csvContent);
-          showSuccess("Sheet processed successfully!");
-        } else {
-          throw new Error(data.error || "Failed to fetch content");
-        }
-      } catch (err) {
-        resultDiv.className = "error";
-        resultDiv.textContent = "❌ Error fetching content: " + err.message;
-      }
+          analyzeData();
+          displayResults();
+        } else alert("Error: " + data.error);
+      } catch (err) { alert("Error: " + err.message); }
     }
 
-    /* === Your existing CSV parser functions from old file === */
-    let rawData = [];
-
+    /* === Your original CSV + analysis functions === */
     function parseCSV(csvContent) {
       const lines = csvContent.split('\n');
-      if (lines.length < 2) throw new Error('CSV file appears to be empty or invalid');
-
+      if (lines.length < 2) throw new Error('CSV empty');
       const headers = parseCSVLine(lines[0]);
       const expectedColumns = ['Brand','Fname','Lname','Number','Initial Send Time','Failed','Response','Response Time (Central)'];
-      for (let col of expectedColumns) {
-        if (!headers.includes(col)) throw new Error(`Missing expected column: ${col}`);
-      }
-
+      for (let col of expectedColumns) if (!headers.includes(col)) throw new Error(`Missing column: ${col}`);
       rawData = [];
       for (let i=1;i<lines.length;i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const values = parseCSVLine(line);
-        if (values.length < headers.length) continue;
-        const record = {};
-        headers.forEach((header, idx) => record[header] = values[idx] || '');
+        const line = lines[i].trim(); if (!line) continue;
+        const values = parseCSVLine(line); if (values.length < headers.length) continue;
+        const record = {}; headers.forEach((h,idx)=>record[h]=values[idx]||'');
         record.messages = [];
-        for (let j=0;j<headers.length;j++) {
-          if (headers[j].startsWith('Message ')) {
-            const msg = values[j] || '';
-            if (msg.trim()) record.messages.push(msg);
-          }
-        }
+        headers.forEach((h,idx)=>{ if(h.startsWith('Message ')){ if(values[idx]) record.messages.push(values[idx]); }});
         rawData.push(record);
       }
-
-      renderData(rawData);
     }
-
     function parseCSVLine(line) {
-      const values = [];
-      let current = '';
-      let inQuotes = false;
-      for (let i=0;i<line.length;i++) {
-        const char = line[i];
-        if (char === '"') {
-          if (inQuotes && line[i+1] === '"') { current += '"'; i++; }
-          else inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          values.push(current.trim()); current = '';
-        } else current += char;
-      }
-      values.push(current.trim());
-      return values;
+      const values=[]; let current=''; let inQuotes=false;
+      for(let i=0;i<line.length;i++){const c=line[i];
+        if(c==='"'){ if(inQuotes&&line[i+1]==='"'){current+='"';i++;} else inQuotes=!inQuotes; }
+        else if(c===','&&!inQuotes){ values.push(current); current=''; }
+        else current+=c;
+      } values.push(current); return values;
     }
 
-    function renderData(data) {
-      const resultDiv = document.getElementById('result');
-      resultDiv.className = 'success';
-      resultDiv.textContent = "✅ Parsed " + data.length + " rows\n\n" + JSON.stringify(data.slice(0,5), null, 2);
+    function analyzeData() {
+      processedData = { noResponse:{}, responses:{}, stopResponses:{} };
+      rawData.forEach(record=>{
+        const brand=record.Brand||'Unknown';
+        const hasResponse=record.Response==='X';
+        if(!processedData.noResponse[brand]) processedData.noResponse[brand]=0;
+        if(!processedData.responses[brand]) processedData.responses[brand]=[];
+        if(!processedData.stopResponses[brand]) processedData.stopResponses[brand]=0;
+        if(hasResponse){
+          const msgs=record.messages||[];
+          const hasStop=msgs.some(m=>m.includes('-> You:')&&/\b(stop|STOP|Stop)\b/.test(m));
+          const name=[record.Fname,record.Lname].filter(n=>n&&n!=='N/A').join(' ')||'No Name';
+          processedData.responses[brand].push({name,phone:record.Number,responseTime:record['Response Time (Central)'],initialSendTime:record['Initial Send Time'],messages:msgs,hasStopMessage:hasStop});
+          if(hasStop) processedData.stopResponses[brand]++;
+        } else processedData.noResponse[brand]++;
+      });
     }
 
-    function showSuccess(msg) {
-      const resultDiv = document.getElementById('result');
-      resultDiv.className = 'success';
-      resultDiv.textContent = msg;
+    function displayResults() {
+      displayNoResponseStats(); displayStopResponseStats(); displayResponseSections();
+      document.getElementById('noResponseSection').style.display='block';
+      document.getElementById('responseSection').style.display='block';
+    }
+
+    function displayNoResponseStats() {
+      const c=document.getElementById('noResponseStats'); c.innerHTML='';
+      const t=document.createElement('table'); const head=document.createElement('tr');
+      head.innerHTML=`<th>Brand</th><th>No Response Count</th>`; t.appendChild(head);
+      Object.entries(processedData.noResponse).forEach(([b,cnt])=>{ if(cnt>0){const r=document.createElement('tr'); r.innerHTML=`<td>${b}</td><td class="number-cell">${cnt}</td>`; t.appendChild(r);} });
+      const total=Object.values(processedData.noResponse).reduce((s,c)=>s+c,0);
+      const tr=document.createElement('tr'); tr.className='total-row'; tr.innerHTML=`<td>Total</td><td class="number-cell">${total}</td>`; t.appendChild(tr);
+      c.appendChild(t);
+    }
+
+    function displayStopResponseStats() {
+      const c=document.getElementById('stopResponsesStats'); c.innerHTML='';
+      const total=Object.values(processedData.stopResponses).reduce((s,c)=>s+c,0);
+      if(total>0){ const card=document.createElement('div'); card.className='stat-card'; card.innerHTML=`<div class="stat-number">${total}</div><div class="stat-label">STOP Responses</div>`; c.appendChild(card);}
+    }
+
+    function displayResponseSections() {
+      const c=document.getElementById('responseBrands'); c.innerHTML='';
+      const total=Object.values(processedData.responses).reduce((s,rs)=>s+rs.length,0);
+      document.getElementById('totalResponsesCount').textContent=`${total} Total Responses`;
+      Object.entries(processedData.responses).forEach(([b,rs])=>{ if(rs.length>0) c.appendChild(createBrandSection(b,rs)); });
+    }
+    function createBrandSection(b,rs){
+      const sec=document.createElement('div'); sec.className='brand-section';
+      const h=document.createElement('div'); h.className='brand-header'; h.innerHTML=`<div class="brand-name">${b}</div><div class="brand-count">${rs.length} responses</div><div class="toggle-icon">▼</div>`;
+      const cont=document.createElement('div'); cont.className='brand-content';
+      rs.forEach(r=>cont.appendChild(createRecordItem(r)));
+      h.addEventListener('click',()=>{const vis=cont.style.display==='block'; cont.style.display=vis?'none':'block';});
+      sec.appendChild(h); sec.appendChild(cont); return sec;
+    }
+    function createRecordItem(r){
+      const i=document.createElement('div'); i.className='record-item';
+      const h=document.createElement('div'); h.className='record-header'; h.innerHTML=`<div class="record-info"><div class="record-name">${r.name}</div><div class="record-phone">${r.phone}</div><div class="record-time">Responded: ${r.responseTime}</div></div><div class="toggle-icon">▼</div>`;
+      const msgs=document.createElement('div'); msgs.className='record-messages';
+      r.messages.forEach(m=>{const msg=document.createElement('div'); msg.className='message'; if(m.includes('You ->:')) msg.classList.add('outgoing'); if(m.includes('-> You:')) msg.classList.add('incoming'); msg.innerHTML=`<div class="message-text">${m}</div>`; msgs.appendChild(msg);});
+      h.addEventListener('click',()=>{const vis=msgs.style.display==='block'; msgs.style.display=vis?'none':'block';});
+      i.appendChild(h); i.appendChild(msgs); return i;
     }
   </script>
 </body>
