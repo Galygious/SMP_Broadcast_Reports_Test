@@ -433,67 +433,7 @@
       display: none;
     }
 
-    /* Date input enhancements */
-    .date-validation-message {
-      padding: 8px 12px;
-      border-radius: 6px;
-      margin-top: 5px;
-      font-size: 0.85rem;
-      display: inline-block;
-    }
-
-    .date-validation-message.valid {
-      background: #f6ffed;
-      border: 1px solid #b7eb8f;
-      color: #389e0d;
-    }
-
-    .date-validation-message.invalid {
-      background: #fff2f0;
-      border: 1px solid #ffccc7;
-      color: #a8071a;
-    }
-
-    .date-validation-message.info {
-      background: #e6f7ff;
-      border: 1px solid #91d5ff;
-      color: #0958d9;
-    }
-
-    .available-dates-list {
-      background: #f8f9ff;
-      border: 1px solid #e1e5f2;
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 10px;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-
-    .available-dates-list h4 {
-      margin: 0 0 8px 0;
-      color: #667eea;
-      font-size: 0.9rem;
-    }
-
-    .available-dates-list .date-item {
-      display: inline-block;
-      background: white;
-      border: 1px solid #d9d9d9;
-      border-radius: 4px;
-      padding: 4px 8px;
-      margin: 2px;
-      font-size: 0.8rem;
-      color: #666;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .available-dates-list .date-item:hover {
-      background: #667eea;
-      color: white;
-      border-color: #667eea;
-    }
+    
 
     @media (max-width: 768px) {
       .container {
@@ -537,11 +477,10 @@
     <div id="dateSelector" class="upload-section hidden">
       <div style="text-align: center;">
         <h3 style="margin-bottom: 20px; color: #667eea;">Select Campaign Date</h3>
-        <div style="margin-bottom: 15px;">
-          <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
-          <input type="date" id="dateInput" onchange="onDateSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-          <div id="availableDatesInfo" style="margin-top: 8px; font-size: 0.9rem; color: #666;"></div>
-        </div>
+                 <div style="margin-bottom: 15px;">
+           <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
+           <input type="date" id="dateInput" onchange="onDateSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+         </div>
       </div>
     </div>
 
@@ -621,9 +560,8 @@
           verifiedSecret = password;
           availableSheets = data.sheetNames;
 
-          // Extract available dates from sheet names
-          extractAvailableDates();
-          setupDateValidation();
+                     // Extract available dates from sheet names
+           extractAvailableDates();
 
           resultDiv.className = "success";
           resultDiv.textContent = "✅ Password verified! Found " + availableSheets.length + " sheets.";
@@ -649,23 +587,15 @@
 
     async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
-      if (!selectedDate) {
-        updateDateValidationMessage("", "");
-        return;
-      }
-
-      // Check if the selected date has available data
-      if (!availableDates.includes(selectedDate)) {
-        updateDateValidationMessage("❌ No data available for this date. Please select from available dates below.", "invalid");
-        return;
-      }
+      if (!selectedDate) return;
 
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
       if (sheetName) {
-        updateDateValidationMessage("✅ Data found! Loading...", "valid");
         await fetchSheetContent(sheetName);
       } else {
-        updateDateValidationMessage("❌ No sheet found for " + selectedDate, "invalid");
+         const resultDiv = document.getElementById("result");
+         resultDiv.className = "error";
+         resultDiv.textContent = "❌ No sheet found for " + selectedDate;
       }
     }
 
@@ -769,7 +699,7 @@
             }
           }
           
-          rawData.push(record);
+        rawData.push(record);
           processedCount++;
           
           // Log first few records for debugging
@@ -1139,74 +1069,7 @@
       console.log("Available dates extracted:", availableDates);
     }
 
-    function setupDateValidation() {
-      const dateInput = document.getElementById("dateInput");
-      const infoDiv = document.getElementById("availableDatesInfo");
-      
-      // Set min and max dates based on available data
-      if (availableDates.length > 0) {
-        const minDate = availableDates[availableDates.length - 1]; // oldest
-        const maxDate = availableDates[0]; // newest
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-      }
-
-      // Show available dates
-      displayAvailableDates();
-    }
-
-    function displayAvailableDates() {
-      const infoDiv = document.getElementById("availableDatesInfo");
-      
-      if (availableDates.length === 0) {
-        infoDiv.innerHTML = '<div class="date-validation-message info">No dates available</div>';
-        return;
-      }
-
-      let html = '<div class="available-dates-list">';
-      html += '<h4>📅 Available Dates (click to select):</h4>';
-      
-      availableDates.forEach(date => {
-        const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        });
-        html += `<span class="date-item" onclick="selectDate('${date}')">${formattedDate}</span>`;
-      });
-      
-      html += '</div>';
-      infoDiv.innerHTML = html;
-    }
-
-    function selectDate(date) {
-      const dateInput = document.getElementById("dateInput");
-      dateInput.value = date;
-      onDateSelected();
-    }
-
-    function updateDateValidationMessage(message, type) {
-      const infoDiv = document.getElementById("availableDatesInfo");
-      const existingList = infoDiv.querySelector('.available-dates-list');
-      
-      // Remove any existing validation message
-      const existingMessage = infoDiv.querySelector('.date-validation-message');
-      if (existingMessage) {
-        existingMessage.remove();
-      }
-      
-      if (message) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `date-validation-message ${type}`;
-        messageDiv.textContent = message;
-        
-        if (existingList) {
-          infoDiv.insertBefore(messageDiv, existingList);
-        } else {
-          infoDiv.appendChild(messageDiv);
-        }
-      }
-    }
+    
   </script>
 </body>
 </html>
