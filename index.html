@@ -539,12 +539,8 @@
         <h3 style="margin-bottom: 20px; color: #667eea;">Select Campaign Date</h3>
         <div style="margin-bottom: 15px;">
           <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
-          <input type="date" id="dateInput" onchange="onDateSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-right: 10px;">
+          <input type="date" id="dateInput" onchange="onDateSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
           <div id="availableDatesInfo" style="margin-top: 8px; font-size: 0.9rem; color: #666;"></div>
-        </div>
-        <div>
-          <label for="dateDropdown" style="display: block; margin-bottom: 5px; font-weight: 600;">Or Select from Available Sheets:</label>
-          <select id="dateDropdown" onchange="onDropdownSelected()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-width: 200px;"></select>
         </div>
       </div>
     </div>
@@ -632,12 +628,6 @@
           resultDiv.className = "success";
           resultDiv.textContent = "✅ Password verified! Found " + availableSheets.length + " sheets.";
 
-          const dropdown = document.getElementById("dateDropdown");
-          dropdown.innerHTML = "<option value=''>-- Select a date --</option>";
-          availableSheets.forEach(name => {
-            dropdown.innerHTML += `<option value="${name}">${name}</option>`;
-          });
-
           // Hide the password section with smooth transition and show the date selector
           const authSection = document.getElementById("authArea").parentElement;
           authSection.classList.add("fade-out");
@@ -657,11 +647,6 @@
       }
     }
 
-    async function onDropdownSelected() {
-      const sheetName = document.getElementById("dateDropdown").value;
-      if (sheetName) await fetchSheetContent(sheetName);
-    }
-
     async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
       if (!selectedDate) {
@@ -678,7 +663,6 @@
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
       if (sheetName) {
         updateDateValidationMessage("✅ Data found! Loading...", "valid");
-        document.getElementById("dateDropdown").value = sheetName;
         await fetchSheetContent(sheetName);
       } else {
         updateDateValidationMessage("❌ No sheet found for " + selectedDate, "invalid");
