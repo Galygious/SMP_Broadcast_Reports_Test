@@ -598,16 +598,27 @@
           // Convert 2D array from Sheets into CSV string
           const rows = data.data;
           const csvContent = rows.map(r =>
-            r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(",")
+            r.map(val => {
+              const str = String(val || '');
+              // Properly escape CSV values: wrap in quotes if contains comma, quote, or newline
+              if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            }).join(",")
           ).join("\n");
 
           // Parse and analyze the data
+          console.log("Raw data rows received:", rows.length);
+          console.log("First few rows:", rows.slice(0, 3));
+          console.log("Generated CSV sample:", csvContent.substring(0, 500) + "...");
+          
           parseCSV(csvContent);
           analyzeData();
           displayResults();
           
           resultDiv.className = "success";
-          resultDiv.textContent = "✅ Sheet processed successfully! Analysis complete.";
+          resultDiv.textContent = `✅ Sheet processed successfully! Analyzed ${rawData.length} records.`;
         } else {
           throw new Error(data.error || "Failed to fetch content");
         }
@@ -627,42 +638,60 @@
 
       // Parse header
       const headers = parseCSVLine(lines[0]);
+      console.log("Parsed headers:", headers);
       
       // Validate expected columns
       const expectedColumns = ['Brand', 'Fname', 'Lname', 'Number', 'Initial Send Time', 'Failed', 'Response', 'Response Time (Central)'];
       for (let col of expectedColumns) {
         if (!headers.includes(col)) {
-          throw new Error(`Missing expected column: ${col}`);
+          throw new Error(`Missing expected column: ${col}. Found columns: ${headers.join(', ')}`);
         }
       }
 
       rawData = [];
+      let processedCount = 0;
       
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        const values = parseCSVLine(line);
-        if (values.length < headers.length) continue;
-        
-        const record = {};
-        headers.forEach((header, index) => {
-          record[header] = values[index] || '';
-        });
-        
-        // Extract message columns
-        record.messages = [];
-        for (let j = 0; j < headers.length; j++) {
-          if (headers[j].startsWith('Message ')) {
-            const messageText = values[j] || '';
-            if (messageText.trim()) {
-              record.messages.push(messageText.trim());
+        try {
+          const values = parseCSVLine(line);
+          if (values.length < headers.length) {
+            console.warn(`Row ${i}: Expected ${headers.length} columns, got ${values.length}`);
+            continue;
+          }
+          
+          const record = {};
+          headers.forEach((header, index) => {
+            record[header] = values[index] || '';
+          });
+          
+          // Extract message columns
+          record.messages = [];
+          for (let j = 0; j < headers.length; j++) {
+            if (headers[j].startsWith('Message ')) {
+              const messageText = values[j] || '';
+              if (messageText.trim()) {
+                record.messages.push(messageText.trim());
+              }
             }
           }
+          
+          rawData.push(record);
+          processedCount++;
+          
+          // Log first few records for debugging
+          if (processedCount <= 3) {
+            console.log(`Record ${processedCount}:`, record);
+          }
+        } catch (error) {
+          console.error(`Error parsing row ${i}:`, error.message);
+          console.error("Problematic line:", line.substring(0, 200) + "...");
         }
-        
-        rawData.push(record);
       }
+      
+      console.log(`Successfully parsed ${processedCount} records out of ${lines.length - 1} data rows`);
     }
 
     function parseCSVLine(line) {
