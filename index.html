@@ -435,7 +435,23 @@
       display: none;
     }
 
-    
+    /* Google Sign-In button centering */
+    #googleSignInButton {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 15px auto;
+    }
+
+    /* Target the actual Google button iframe */
+    #googleSignInButton iframe {
+      margin: 0 auto;
+    }
+
+    /* Target the Google button div */
+    #googleSignInButton > div {
+      margin: 0 auto;
+    }
 
     @media (max-width: 768px) {
       .container {
