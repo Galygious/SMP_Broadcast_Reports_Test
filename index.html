@@ -491,7 +491,9 @@
         <h3 style="margin-bottom: 20px; color: #667eea;">Select Campaign Date</h3>
                  <div style="margin-bottom: 15px;">
            <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
-           <input type="date" id="dateInput" onchange="onDateSelected()" aria-label="Select campaign date to view analysis" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+           <select id="dateInput" onchange="onDateSelected()" aria-label="Select campaign date to view analysis" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; width: 200px;">
+             <option value="">Select a date...</option>
+           </select>
          </div>
       </div>
     </div>
@@ -709,14 +711,7 @@
       const selectedDate = document.getElementById("dateInput").value;
       if (!selectedDate) return;
 
-      // Check if the selected date is in our available dates
-      if (!availableDates.includes(selectedDate)) {
-        const resultDiv = document.getElementById("result");
-        resultDiv.className = "error";
-        resultDiv.textContent = `❌ No data available for ${selectedDate}. Please select a date with available data.`;
-        return;
-      }
-
+      // Find the sheet name that starts with the selected date
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
       if (sheetName) {
         await fetchSheetContent(sheetName);
@@ -1159,15 +1154,32 @@
     }
 
     function setupDateLimits() {
-      const dateInput = document.getElementById("dateInput");
+      const dateSelect = document.getElementById("dateInput");
       
-      // Set min and max dates based on available data
+      // Clear existing options except the first one
+      while (dateSelect.children.length > 1) {
+        dateSelect.removeChild(dateSelect.lastChild);
+      }
+      
+      // Populate dropdown with only available dates
       if (availableDates.length > 0) {
-        const minDate = availableDates[availableDates.length - 1]; // oldest
-        const maxDate = availableDates[0]; // newest
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        console.log(`Date picker limited to: ${minDate} to ${maxDate}`);
+        availableDates.forEach(date => {
+          const option = document.createElement('option');
+          option.value = date;
+          
+          // Format date for display (e.g., "2024-01-22" -> "January 22, 2024")
+          const dateObj = new Date(date + 'T00:00:00'); // Add time to avoid timezone issues
+          const formattedDate = dateObj.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+          
+          option.textContent = `${formattedDate} (${date})`;
+          dateSelect.appendChild(option);
+        });
+        
+        console.log(`Date picker populated with ${availableDates.length} available dates:`, availableDates);
       }
     }
 
