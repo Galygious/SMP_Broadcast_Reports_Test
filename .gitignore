@@ -5,6 +5,7 @@ stats.html
 # Ignore userscript and backend files
 Heymarket Data Scraper.user.js
 App.script
+code.gs
 
 # Common IDE files
 .vscode/
