@@ -6,6 +6,9 @@
   <title>Heymarket Campaign Analysis Tool</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css">
   <style>
     * {
       margin: 0;
@@ -453,6 +456,25 @@
       margin: 0 auto;
     }
 
+    /* jQuery UI Datepicker custom styles */
+    .available-date a {
+      background-color: #e8f5e8 !important;
+      border-color: #4caf50 !important;
+      color: #2e7d32 !important;
+      font-weight: bold !important;
+    }
+    
+    .available-date a:hover {
+      background-color: #c8e6c9 !important;
+    }
+    
+    .unavailable-date a {
+      background-color: #ffebee !important;
+      border-color: #f44336 !important;
+      color: #c62828 !important;
+      text-decoration: line-through !important;
+    }
+
     @media (max-width: 768px) {
       .container {
         padding: 10px;
@@ -507,9 +529,10 @@
         <h3 style="margin-bottom: 20px; color: #667eea;">Select Campaign Date</h3>
                  <div style="margin-bottom: 15px;">
            <label for="dateInput" style="display: block; margin-bottom: 5px; font-weight: 600;">Choose Date:</label>
-           <select id="dateInput" onchange="onDateSelected()" aria-label="Select campaign date to view analysis" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; width: 200px;">
-             <option value="">Select a date...</option>
-           </select>
+           <input type="text" id="dateInput" readonly placeholder="Click to select date" aria-label="Select campaign date to view analysis" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; width: 200px; cursor: pointer; background: white;">
+           <div id="dateInfo" style="color: #667eea; font-size: 0.9rem; margin-top: 5px;">
+             Available dates: <span id="availableDatesText">Loading...</span>
+           </div>
          </div>
       </div>
     </div>
@@ -573,11 +596,78 @@
       stopResponses: {}
     };
 
+    // Check if this is a userscript authentication request
+    function checkUserscriptAuth() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isUserscriptAuth = urlParams.get('userscript_auth');
+      const state = urlParams.get('state');
+      const returnUrl = urlParams.get('return_url');
+      
+      if (isUserscriptAuth === 'true' && state && returnUrl) {
+        console.log('🔄 Userscript authentication detected');
+        
+        // Store auth params for after OAuth completion
+        sessionStorage.setItem('userscript_auth_state', state);
+        sessionStorage.setItem('userscript_return_url', decodeURIComponent(returnUrl));
+        
+        // Show special message for userscript users
+        document.body.innerHTML = `
+          <div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">
+            <h2>🔐 Authenticating Userscript</h2>
+            <p>Please sign in with Google to authenticate your Heymarket userscript.</p>
+            <p>After signing in, you'll be automatically redirected back to Heymarket.</p>
+            <div id="googleSignInButton" style="margin: 20px auto; display: inline-block;"></div>
+          </div>
+        `;
+        
+        return true;
+      }
+      
+      return false;
+    }
+
+    // Handle successful OAuth for userscript flow
+    function handleUserscriptAuthSuccess(token) {
+      const state = sessionStorage.getItem('userscript_auth_state');
+      const returnUrl = sessionStorage.getItem('userscript_return_url');
+      
+      if (state && returnUrl) {
+        console.log('✅ Redirecting back to userscript with token');
+        
+        // Clean up session storage
+        sessionStorage.removeItem('userscript_auth_state');
+        sessionStorage.removeItem('userscript_return_url');
+        
+        // Build return URL with token
+        const redirectUrl = new URL(returnUrl);
+        redirectUrl.searchParams.append('userscript_auth_return', 'true');
+        redirectUrl.searchParams.append('token', token);
+        redirectUrl.searchParams.append('state', state);
+        
+        // Redirect back to Heymarket
+        window.location.href = redirectUrl.toString();
+        return true;
+      }
+      
+      return false;
+    }
+
     // Initialize Google Sign-In when page loads
     window.onload = function() {
+      // Check if this is a userscript auth request first
+      const isUserscriptAuth = checkUserscriptAuth();
+      
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: handleSignInResponse,
+        callback: function(response) {
+          // Check if this is for userscript auth
+          if (isUserscriptAuth && handleUserscriptAuthSuccess(response.credential)) {
+            return; // Redirecting to userscript, don't process normal flow
+          }
+          
+          // Normal web app flow
+          handleSignInResponse(response);
+        },
         auto_select: false,
         cancel_on_tap_outside: false
       });
@@ -664,7 +754,7 @@
           action: "verifyAccess" 
         };
         
-        const response = await fetch(scriptUrl, {
+        const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
           method: "POST",
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(payload),
@@ -691,7 +781,7 @@
           action: "getSheetNames" 
         };
         
-        const response = await fetch(scriptUrl, {
+        const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
           method: "POST",
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(payload),
@@ -732,7 +822,11 @@
 
         async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
+      
       if (!selectedDate) return;
+
+      // jQuery datepicker already ensures only valid dates can be selected
+      console.log('Selected date:', selectedDate);
 
       // Find the sheet name that starts with the selected date
       const sheetName = availableSheets.find(name => name.startsWith(selectedDate));
@@ -1177,32 +1271,50 @@
     }
 
     function setupDateLimits() {
-      const dateSelect = document.getElementById("dateInput");
+      const availableDatesText = document.getElementById("availableDatesText");
       
-      // Clear existing options except the first one
-      while (dateSelect.children.length > 1) {
-        dateSelect.removeChild(dateSelect.lastChild);
-      }
-      
-      // Populate dropdown with only available dates
       if (availableDates.length > 0) {
-        availableDates.forEach(date => {
-          const option = document.createElement('option');
-          option.value = date;
-          
-          // Format date for display (e.g., "2024-01-22" -> "January 22, 2024")
-          const dateObj = new Date(date + 'T00:00:00'); // Add time to avoid timezone issues
-          const formattedDate = dateObj.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          });
-          
-          option.textContent = `${formattedDate} (${date})`;
-          dateSelect.appendChild(option);
+        // Convert available dates to Date objects for comparison
+        const availableDateObjects = availableDates.map(dateStr => new Date(dateStr + 'T00:00:00'));
+        
+        // Initialize jQuery datepicker with beforeShowDay function
+        $("#dateInput").datepicker({
+          dateFormat: 'yy-mm-dd',
+          beforeShowDay: function(date) {
+            // Check if this date is in our available dates
+            const dateString = date.getFullYear() + '-' + 
+                             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                             String(date.getDate()).padStart(2, '0');
+            
+            const isAvailable = availableDates.includes(dateString);
+            
+            // Return [enabled, cssClass, tooltip]
+            if (isAvailable) {
+              return [true, 'available-date', 'Data available for this date'];
+            } else {
+              return [false, 'unavailable-date', 'No data available for this date'];
+            }
+          },
+          onSelect: function(dateText) {
+            // Call our existing function when a date is selected
+            onDateSelected();
+          },
+          minDate: new Date(availableDates[availableDates.length - 1] + 'T00:00:00'), // oldest
+          maxDate: new Date(availableDates[0] + 'T00:00:00') // newest
         });
         
-        console.log(`Date picker populated with ${availableDates.length} available dates:`, availableDates);
+        // Update the available dates text
+        const formattedDates = availableDates.map(date => {
+          const dateObj = new Date(date + 'T00:00:00');
+          return dateObj.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          });
+        }).join(', ');
+        
+        availableDatesText.textContent = formattedDates;
+        
+        console.log(`jQuery datepicker configured with available dates:`, availableDates);
       }
     }
 
