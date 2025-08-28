@@ -1,18 +1,22 @@
 // ==UserScript==
 // @name         Heymarket Data Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  Scrapes Heymarket list and conversation data and sends it to Google Sheets.
+// @version      5.0
+// @description  Scrapes Heymarket list and conversation data and sends it to Google Sheets with seamless redirect-based Google OAuth authentication.
 // @match        https://app.heymarket.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_download
+// @grant        window.close
+// @grant        window.focus
 // @connect      api-prod-client.heymarket.com
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
 // @connect      *.google.com
 // @connect      *.googleusercontent.com
+// @connect      accounts.google.com
+// @connect      oauth2.googleapis.com
 // @run-at       document-start
 // ==/UserScript==
 
@@ -128,34 +132,166 @@ let SECURITY_TOKEN = null;
     // Google Apps Script configuration
     const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec";
 
-    // Secure password management with Tampermonkey storage
-    function getStoredPassword() {
-        return GM_getValue('google_script_password', null);
+    // Google OAuth configuration
+    const GOOGLE_CLIENT_ID = "221842260905-nidbveovs3vjft1oc42rf4a3aeamdafo.apps.googleusercontent.com";
+
+    // OAuth token management with Tampermonkey storage
+    function getStoredToken() {
+        return GM_getValue('google_oauth_token', null);
     }
 
-    function setStoredPassword(password) {
-        GM_setValue('google_script_password', password);
+    function setStoredToken(token) {
+        GM_setValue('google_oauth_token', token);
     }
 
-    function promptForPassword() {
-        const savedPassword = getStoredPassword();
+    function clearStoredToken() {
+        GM_setValue('google_oauth_token', null);
+    }
+
+    async function promptForOAuthToken() {
+        const savedToken = getStoredToken();
         
-        if (savedPassword) {
-            const useStored = confirm('Use saved password? Click OK to use saved password, or Cancel to enter a new one.');
-            if (useStored) {
-                return savedPassword;
+        if (savedToken) {
+            // Try to validate the saved token first
+            const isValid = await validateToken(savedToken);
+            if (isValid) {
+                console.log('✅ Using saved OAuth token');
+                return savedToken;
+            } else {
+                console.log('❌ Saved token is invalid, clearing it');
+                clearStoredToken();
             }
         }
         
-        const password = prompt('Enter Google Apps Script password:');
-        if (password) {
-            const savePassword = confirm('Save this password securely in Tampermonkey for future use?');
-            if (savePassword) {
-                setStoredPassword(password);
+        // Start Google OAuth flow
+        console.log('🔐 Starting Google OAuth authentication...');
+        const token = await authenticateWithGoogle();
+        
+        if (token) {
+            const isValid = await validateToken(token);
+            if (isValid) {
+                setStoredToken(token);
+                console.log('✅ OAuth authentication successful');
+                return token;
+            } else {
+                alert('❌ Authentication failed. Please try again.');
+                return null;
             }
         }
         
-        return password;
+        return null;
+    }
+
+    async function authenticateWithGoogle() {
+        return new Promise((resolve, reject) => {
+            // Create a special auth URL that will handle the OAuth flow and return to Heymarket
+            const currentUrl = window.location.href;
+            const state = Math.random().toString(36).substring(2, 15);
+            
+            // Store the callback info for when we return
+            GM_setValue('auth_state', state);
+            GM_setValue('auth_callback', 'pending');
+            GM_setValue('return_url', currentUrl);
+            
+            // Build OAuth URL that redirects to our auth page
+            const authUrl = new URL('https://galygious.github.io/SMP_Broadcast_Reports_Test/');
+            authUrl.searchParams.append('userscript_auth', 'true');
+            authUrl.searchParams.append('state', state);
+            authUrl.searchParams.append('return_url', encodeURIComponent(currentUrl));
+            
+            console.log('🔐 Redirecting to Google authentication...');
+            
+            // Show user what's happening
+            const shouldProceed = confirm(`🔐 Google Authentication Required
+
+This will redirect you to sign in with Google and then return you back to this page.
+
+Click OK to proceed with authentication.`);
+
+            if (!shouldProceed) {
+                reject(new Error('Authentication cancelled by user'));
+                return;
+            }
+
+            // Set up a listener for when we return
+            const checkInterval = setInterval(() => {
+                const authResult = GM_getValue('auth_callback', 'pending');
+                if (authResult !== 'pending') {
+                    clearInterval(checkInterval);
+                    
+                    if (authResult && authResult.startsWith('eyJ')) {
+                        // Success! We got a token
+                        GM_setValue('auth_callback', 'pending'); // Reset for next time
+                        console.log('✅ Authentication successful');
+                        resolve(authResult);
+                    } else {
+                        // Error or cancellation
+                        console.log('❌ Authentication failed');
+                        reject(new Error('Authentication failed or cancelled'));
+                    }
+                }
+            }, 1000);
+
+            // Redirect to auth page
+            window.location.href = authUrl.toString();
+        });
+    }
+
+    // Check if we're returning from authentication
+    function checkForAuthReturn() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAuthReturn = urlParams.get('userscript_auth_return');
+        const token = urlParams.get('token');
+        const state = urlParams.get('state');
+        
+        if (isAuthReturn && token && state) {
+            const expectedState = GM_getValue('auth_state', '');
+            
+            if (state === expectedState) {
+                // Valid auth return - store the token
+                console.log('✅ Auth return detected, storing token');
+                GM_setValue('auth_callback', token);
+                
+                // Clean up URL parameters
+                const cleanUrl = window.location.href.split('?')[0];
+                window.history.replaceState({}, document.title, cleanUrl);
+                
+                return true;
+            } else {
+                console.log('❌ Invalid auth state');
+                GM_setValue('auth_callback', 'error');
+            }
+        }
+        
+        return false;
+    }
+
+
+
+    async function validateToken(token) {
+        try {
+            // Quick validation by trying to verify access
+            const response = await new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: GOOGLE_APPS_SCRIPT_URL,
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8'
+                    },
+                    data: JSON.stringify({
+                        userToken: token,
+                        action: 'verifyAccess'
+                    }),
+                    onload: (resp) => resolve(JSON.parse(resp.responseText)),
+                    onerror: reject
+                });
+            });
+            
+            return response.ok === true;
+        } catch (error) {
+            console.error('Token validation error:', error);
+            return false;
+        }
     }
 
 
@@ -229,7 +365,7 @@ let SECURITY_TOKEN = null;
         return null;
     }
 
-    async function checkIfDateAlreadyExported(sheetDate, password) {
+    async function checkIfDateAlreadyExported(sheetDate, userToken) {
         try {
             console.log(`Checking if data for ${sheetDate} has already been exported...`);
 
@@ -238,10 +374,10 @@ let SECURITY_TOKEN = null;
                     method: 'POST',
                     url: GOOGLE_APPS_SCRIPT_URL,
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'text/plain;charset=utf-8'
                     },
                     data: JSON.stringify({
-                        secret: password,
+                        userToken: userToken,
                         action: 'getSheetNames'
                     }),
                     onload: (response) => {
@@ -314,7 +450,7 @@ let SECURITY_TOKEN = null;
         return csvContent;
     }
 
-    async function sendToGoogleSheets(password, sheetDate) {
+    async function sendToGoogleSheets(userToken, sheetDate) {
         if (allData.length === 0) {
             console.log("No data to send to Google Sheets.");
             return;
@@ -329,13 +465,6 @@ let SECURITY_TOKEN = null;
         // Create 2D array for Google Sheets (headers + data)
         const values = [headers, ...allData];
 
-        // Prepare payload for Google Apps Script
-        const payload = {
-            password: password,
-            action: 'appendData',
-            values: values
-        };
-
         try {
             console.log("Sending data to Google Sheets...");
 
@@ -348,7 +477,7 @@ let SECURITY_TOKEN = null;
                         'Content-Type': 'text/plain;charset=utf-8'
                     },
                     data: JSON.stringify({
-                        secret: password,
+                        userToken: userToken,
                         action: 'appendData',
                         sheetDate: sheetDate,
                         values: values
@@ -464,10 +593,10 @@ let SECURITY_TOKEN = null;
         }
         console.log("✅ Security token available:", SECURITY_TOKEN.substring(0, 20) + '...');
 
-        // Get password from secure storage
-        const password = promptForPassword();
-        if (!password) {
-            alert("❌ Password is required to save data to Google Sheets.");
+        // Get OAuth token from secure storage
+        const userToken = await promptForOAuthToken();
+        if (!userToken) {
+            alert("❌ OAuth token is required to save data to Google Sheets.");
             return;
         }
 
@@ -491,13 +620,13 @@ let SECURITY_TOKEN = null;
             const response = await fetchWithToken(url, { body: JSON.stringify(body) });
             listData = response.lists;
             console.log(`Found ${listData.length} lists.`);
-            await fetchBroadcasts(response.broadcasts, password);
+            await fetchBroadcasts(response.broadcasts, userToken);
         } catch (error) {
             console.error("Error fetching lists:", error);
         }
     }
 
-    async function fetchBroadcasts(broadcasts, password) {
+    async function fetchBroadcasts(broadcasts, userToken) {
         console.log("Processing broadcasts...");
         
         // Extract dates from broadcasts to determine the sheet date
@@ -508,7 +637,7 @@ let SECURITY_TOKEN = null;
         console.log(`Broadcasts date range: ${broadcastDates.length > 0 ? 'earliest=' + sheetDate : 'no valid dates, using today'}`);
         
         // Check if this date's data has already been exported
-        const alreadyExported = await checkIfDateAlreadyExported(sheetDate, password);
+        const alreadyExported = await checkIfDateAlreadyExported(sheetDate, userToken);
         if (alreadyExported) {
             const overwrite = confirm(`⚠️ Data for ${sheetDate} has already been exported to Google Sheets.\n\nDo you want to OVERWRITE the existing data?\n\nClick OK to overwrite, or Cancel to abort.`);
             if (!overwrite) {
@@ -523,7 +652,7 @@ let SECURITY_TOKEN = null;
         totalReportsToProcess = reportPromises.length;
         await Promise.all(reportPromises);
         console.log("All broadcasts processed. Sending to Google Sheets.");
-        await sendToGoogleSheets(password, sheetDate);
+        await sendToGoogleSheets(userToken, sheetDate);
     }
 
     async function processBroadcast(broadcast) {
@@ -663,5 +792,9 @@ let SECURITY_TOKEN = null;
         document.body.appendChild(button);
     }
 
-    createUI();
+    // Check if we're returning from authentication before creating UI
+    if (!checkForAuthReturn()) {
+        // Only create UI if we're not in the middle of auth flow
+        createUI();
+    }
 })();
