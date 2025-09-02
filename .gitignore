@@ -3,7 +3,6 @@ response.txt
 stats.html
 
 # Ignore userscript and backend files
-Heymarket Data Scraper.user.js
 App.script
 code.gs
 
@@ -14,4 +13,4 @@ code.gs
 # OS files
 .DS_Store
 Thumbs.db
-heymarket_data_scraper.user.script
+heymarket_data_scraper.user.js
