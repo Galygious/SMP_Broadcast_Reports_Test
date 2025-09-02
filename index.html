@@ -1192,6 +1192,12 @@
         heymarketBtn.href = `https://app.heymarket.com/chats/${record.conversationId}`;
         heymarketBtn.target = '_blank';
         heymarketBtn.textContent = 'View on Heymarket';
+
+        // Prevent event propagation to avoid triggering the fold/unfold feature
+        heymarketBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+
         recordInfo.appendChild(heymarketBtn);
       }
 
