@@ -129,6 +129,28 @@
       box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }
 
+    .heymarket-btn {
+      background: linear-gradient(135deg, #4a90e2, #357abd);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.3s ease;
+      margin-left: 10px;
+      white-space: nowrap;
+      text-decoration: none;
+      display: inline-block;
+      font-weight: 500;
+    }
+
+    .heymarket-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+      background: linear-gradient(135deg, #357abd, #2c5aa0);
+    }
+
     .analysis-section {
       display: none;
       background: white;
@@ -893,7 +915,7 @@
       console.log("Parsed headers:", headers);
       
       // Validate expected columns
-      const expectedColumns = ['Brand', 'Fname', 'Lname', 'Number', 'Initial Send Time', 'Failed', 'Response', 'Response Time (Central)'];
+      const expectedColumns = ['Brand', 'Fname', 'Lname', 'Number', 'Initial Send Time', 'Failed', 'Response', 'Response Time (Central)', 'Conversation ID'];
       for (let col of expectedColumns) {
         if (!headers.includes(col)) {
           throw new Error(`Missing expected column: ${col}. Found columns: ${headers.join(', ')}`);
@@ -1006,7 +1028,8 @@
             responseTime: record['Response Time (Central)'] || 'N/A',
             initialSendTime: record['Initial Send Time'] || 'N/A',
             messages: messages,
-            hasStopMessage: hasStopMessage
+            hasStopMessage: hasStopMessage,
+            conversationId: record['Conversation ID'] || ''
           };
           
           processedData.responses[brand].push(responseRecord);
@@ -1142,14 +1165,42 @@
       
       const header = document.createElement('div');
       header.className = 'record-header';
-      header.innerHTML = `
-        <div class="record-info">
-          <div class="record-name">${record.name}</div>
-          <div class="record-phone">${record.phone}</div>
-          <div class="record-time">Responded: ${record.responseTime}</div>
-        </div>
-        <div class="toggle-icon">▼</div>
-      `;
+
+      const recordInfo = document.createElement('div');
+      recordInfo.className = 'record-info';
+
+      const recordName = document.createElement('div');
+      recordName.className = 'record-name';
+      recordName.textContent = record.name;
+
+      const recordPhone = document.createElement('div');
+      recordPhone.className = 'record-phone';
+      recordPhone.textContent = record.phone;
+
+      const recordTime = document.createElement('div');
+      recordTime.className = 'record-time';
+      recordTime.textContent = `Responded: ${record.responseTime}`;
+
+      recordInfo.appendChild(recordName);
+      recordInfo.appendChild(recordPhone);
+      recordInfo.appendChild(recordTime);
+
+      // Add Heymarket button if conversation ID exists
+      if (record.conversationId && record.conversationId.trim() !== '') {
+        const heymarketBtn = document.createElement('a');
+        heymarketBtn.className = 'heymarket-btn';
+        heymarketBtn.href = `https://app.heymarket.com/chats/${record.conversationId}`;
+        heymarketBtn.target = '_blank';
+        heymarketBtn.textContent = 'View on Heymarket';
+        recordInfo.appendChild(heymarketBtn);
+      }
+
+      const toggleIcon = document.createElement('div');
+      toggleIcon.className = 'toggle-icon';
+      toggleIcon.textContent = '▼';
+
+      header.appendChild(recordInfo);
+      header.appendChild(toggleIcon);
       
       const messages = document.createElement('div');
       messages.className = 'record-messages';
