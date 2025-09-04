@@ -1594,10 +1594,13 @@
       console.log("Available dates:", availableDates);
 
       if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
+        // Parse dates consistently to avoid timezone issues
+        const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+        const start = new Date(startYear, startMonth - 1, startDay);
+        const end = new Date(endYear, endMonth - 1, endDay);
 
-        console.log("Parsed dates:", { start, end });
+        console.log("Parsed dates:", { start: start.toLocaleString(), end: end.toLocaleString() });
 
         if (start > end) {
           bulkDateInfo.textContent = '❌ Start date cannot be after end date';
@@ -1607,9 +1610,11 @@
 
         // Count how many dates are in the range
         const datesInRange = availableDates.filter(date => {
-          const dateObj = new Date(date);
+          // Parse available date using the same method
+          const [year, month, day] = date.split('-').map(Number);
+          const dateObj = new Date(year, month - 1, day, 12, 0, 0, 0); // Use noon to avoid edge cases
           const isInRange = dateObj >= start && dateObj <= end;
-          console.log(`Date ${date} (${dateObj}) in range: ${isInRange}`);
+          console.log(`Date ${date} (${dateObj.toLocaleDateString()}) in range: ${isInRange}`);
           return isInRange;
         });
 
@@ -1654,20 +1659,28 @@
 
       try {
         // Find all sheets within the date range
-        const start = new Date(startDate);
-        // Set end date to end of the day to include all sheets created on that date
-        const end = new Date(endDate + 'T23:59:59.999');
+        // Create dates in a way that preserves the intended local date
+        const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+
+        // Create dates using local timezone components to avoid timezone conversion
+        const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+        const end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
 
         console.log('Date range filtering:');
-        console.log('Start date:', start.toISOString());
-        console.log('End date:', end.toISOString());
+        console.log('Start date input:', startDate, '-> parsed as:', start.toLocaleString());
+        console.log('End date input:', endDate, '-> parsed as:', end.toLocaleString());
+        console.log('Start date (UTC):', start.toISOString());
+        console.log('End date (UTC):', end.toISOString());
 
         const sheetsInRange = availableSheets.filter(sheetName => {
           const dateMatch = sheetName.match(/^(\d{4}-\d{2}-\d{2})/);
           if (dateMatch) {
-            const sheetDate = new Date(dateMatch[1]);
+            // Parse sheet date using the same method as start/end dates
+            const [year, month, day] = dateMatch[1].split('-').map(Number);
+            const sheetDate = new Date(year, month - 1, day, 12, 0, 0, 0); // Use noon to avoid edge cases
             const isInRange = sheetDate >= start && sheetDate <= end;
-            console.log(`Sheet ${sheetName}: ${sheetDate.toISOString()} - ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
+            console.log(`Sheet ${sheetName}: ${sheetDate.toLocaleDateString()} - ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
             return isInRange;
           }
           return false;
@@ -2164,20 +2177,20 @@
 
       let dateInfo = "";
       if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
+        // Parse dates consistently to avoid timezone issues
+        const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+        const displayStart = new Date(startYear, startMonth - 1, startDay);
+        const displayEnd = new Date(endYear, endMonth - 1, endDay);
 
-        if (start.getTime() === end.getTime()) {
-          dateInfo = `📊 Bulk Heymarket Campaign Report for ${start.toLocaleDateString('en-US', {
+        if (displayStart.getTime() === displayEnd.getTime()) {
+          dateInfo = `📊 Bulk Heymarket Campaign Report for ${displayStart.toLocaleDateString('en-US', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric'
           })}\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
         } else {
-          // Use the original selected dates for display, not the adjusted end date
-          const displayStart = new Date(startDate);
-          const displayEnd = new Date(endDate);
           dateInfo = `📊 Bulk Heymarket Campaign Report (${displayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${displayEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
         }
       }
