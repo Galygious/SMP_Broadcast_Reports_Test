@@ -902,16 +902,23 @@
         const data = await response.json();
 
         if (data.ok) {
+          console.log("Raw data received:", data.data);
+          console.log("Data type:", typeof data.data, "Is array:", Array.isArray(data.data));
+
           // Work directly with 2D array from Sheets
           const rows = data.data;
-          
+
+          if (!Array.isArray(rows)) {
+            throw new Error(`Sheet data is not in expected array format. Type: ${typeof rows}, Value: ${JSON.stringify(rows)}`);
+          }
+
           console.log("Raw data rows received:", rows.length);
           console.log("First few rows:", rows.slice(0, 3));
-          
+
           parseSheetData(rows);
           analyzeData();
           displayResults();
-          
+
           resultDiv.className = "success";
           resultDiv.textContent = `✅ Sheet processed successfully! Analyzed ${rawData.length} records.`;
         } else {
@@ -926,8 +933,17 @@
     }
 
         function parseSheetData(rows) {
+      console.log("Raw rows received:", rows);
+      console.log("First few rows:", rows.slice(0, 3));
+
       if (!rows || rows.length < 2) {
         throw new Error('Sheet data appears to be empty or invalid');
+      }
+
+      // Check if first row is an array
+      if (!Array.isArray(rows[0])) {
+        console.error("rows[0] is not an array:", rows[0]);
+        throw new Error(`First row is not an array. Type: ${typeof rows[0]}, Value: ${JSON.stringify(rows[0])}`);
       }
 
       // First row is headers
@@ -1689,12 +1705,27 @@
           const data = await response.json();
 
           if (data.ok) {
+            console.log(`Raw data from ${sheetName}:`, data.data);
+            console.log(`Data type: ${typeof data.data}, Is array: ${Array.isArray(data.data)}`);
+
+            if (!Array.isArray(data.data)) {
+              console.error(`Data from ${sheetName} is not an array:`, data.data);
+              throw new Error(`Data from sheet ${sheetName} is not in expected array format`);
+            }
+
             // Add sheet identifier to each record
-            const sheetData = data.data.map(row => ({
-              ...row,
-              _sheetName: sheetName,
-              _sheetDate: sheetName.match(/^(\d{4}-\d{2}-\d{2})/)[1]
-            }));
+            const sheetData = data.data.map(row => {
+              console.log(`Processing row:`, row, `Type: ${typeof row}, Is array: ${Array.isArray(row)}`);
+              if (!Array.isArray(row)) {
+                console.error(`Row is not an array:`, row);
+                return row; // Return as-is if not an array
+              }
+              return [
+                ...row,
+                sheetName, // _sheetName
+                sheetName.match(/^(\d{4}-\d{2}-\d{2})/)[1] // _sheetDate
+              ];
+            });
             aggregatedData.push(...sheetData);
           } else {
             console.warn(`Failed to fetch ${sheetName}:`, data.error);
@@ -1709,9 +1740,16 @@
 
     function processBulkData(allRows) {
       console.log(`Processing ${allRows.length} total records from bulk data`);
+      console.log("First few rows of allRows:", allRows.slice(0, 3));
 
       if (!allRows || allRows.length < 2) {
         throw new Error('Bulk data appears to be empty or invalid');
+      }
+
+      // Check if first row is an array
+      if (!Array.isArray(allRows[0])) {
+        console.error("allRows[0] is not an array:", allRows[0]);
+        throw new Error(`First row is not an array. Type: ${typeof allRows[0]}, Value: ${JSON.stringify(allRows[0])}`);
       }
 
       // First row is headers
@@ -1745,6 +1783,10 @@
           headers.forEach((header, index) => {
             record[header] = String(row[index] || '').trim();
           });
+
+          // Add sheet information (stored at the end of the row)
+          record._sheetName = row[headers.length] || sheetName; // fallback to current sheetName
+          record._sheetDate = row[headers.length + 1] || sheetName.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || 'unknown';
 
           // Extract message columns
           record.messages = [];
@@ -1800,7 +1842,7 @@
               messages: messages,
               hasStopMessage: hasStopMessage,
               conversationId: record['Conversation ID'] || '',
-              sheetDate: record._sheetDate
+              sheetDate: record._sheetDate || 'unknown'
             };
 
             bulkProcessedData.responses[brand].push(responseRecord);
