@@ -556,6 +556,24 @@
              Available dates: <span id="availableDatesText">Loading...</span>
            </div>
          </div>
+
+        <div style="margin: 20px 0; padding: 20px; background: #f8f9ff; border-radius: 10px; border: 1px solid #e1e5f2;">
+          <h4 style="margin-bottom: 15px; color: #667eea;">📊 Bulk Report (Date Range)</h4>
+          <div style="display: flex; gap: 15px; justify-content: center; align-items: center; flex-wrap: wrap;">
+            <div>
+              <label for="bulkStartDate" style="display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem;">Start Date:</label>
+              <input type="text" id="bulkStartDate" readonly placeholder="Start date" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 140px; cursor: pointer; background: white; font-size: 0.9rem;">
+            </div>
+            <div>
+              <label for="bulkEndDate" style="display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem;">End Date:</label>
+              <input type="text" id="bulkEndDate" readonly placeholder="End date" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 140px; cursor: pointer; background: white; font-size: 0.9rem;">
+            </div>
+            <button id="generateBulkReport" class="btn" style="background: linear-gradient(135deg, #52c41a, #389e0d); margin-top: 20px;">Generate Bulk Report</button>
+          </div>
+          <div id="bulkDateInfo" style="color: #666; font-size: 0.8rem; margin-top: 10px;">
+            Select a date range to aggregate data across multiple campaigns
+          </div>
+        </div>
       </div>
     </div>
 
@@ -618,6 +636,7 @@
       responses: {},
       stopResponses: {}
     };
+    let bulkProcessedData = null; // For storing aggregated bulk data
 
     // Check if this is a userscript authentication request
     function checkUserscriptAuth() {
@@ -1469,22 +1488,22 @@
 
     function setupDateLimits() {
       const availableDatesText = document.getElementById("availableDatesText");
-      
+
       if (availableDates.length > 0) {
         // Convert available dates to Date objects for comparison
         const availableDateObjects = availableDates.map(dateStr => new Date(dateStr + 'T00:00:00'));
-        
-        // Initialize jQuery datepicker with beforeShowDay function
+
+        // Initialize single date picker
         $("#dateInput").datepicker({
           dateFormat: 'yy-mm-dd',
           beforeShowDay: function(date) {
             // Check if this date is in our available dates
-            const dateString = date.getFullYear() + '-' + 
-                             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+            const dateString = date.getFullYear() + '-' +
+                             String(date.getMonth() + 1).padStart(2, '0') + '-' +
                              String(date.getDate()).padStart(2, '0');
-            
+
             const isAvailable = availableDates.includes(dateString);
-            
+
             // Return [enabled, cssClass, tooltip]
             if (isAvailable) {
               return [true, 'available-date', 'Data available for this date'];
@@ -1499,23 +1518,664 @@
           minDate: new Date(availableDates[availableDates.length - 1] + 'T00:00:00'), // oldest
           maxDate: new Date(availableDates[0] + 'T00:00:00') // newest
         });
-        
+
+        // Initialize bulk date pickers
+        $("#bulkStartDate, #bulkEndDate").datepicker({
+          dateFormat: 'yy-mm-dd',
+          beforeShowDay: function(date) {
+            // Check if this date is in our available dates
+            const dateString = date.getFullYear() + '-' +
+                             String(date.getMonth() + 1).padStart(2, '0') + '-' +
+                             String(date.getDate()).padStart(2, '0');
+
+            const isAvailable = availableDates.includes(dateString);
+
+            // Return [enabled, cssClass, tooltip]
+            if (isAvailable) {
+              return [true, 'available-date', 'Data available for this date'];
+            } else {
+              return [false, 'unavailable-date', 'No data available for this date'];
+            }
+          },
+          minDate: new Date(availableDates[availableDates.length - 1] + 'T00:00:00'), // oldest
+          maxDate: new Date(availableDates[0] + 'T00:00:00'), // newest
+          onSelect: function() {
+            validateBulkDateRange();
+          }
+        });
+
         // Update the available dates text
         const formattedDates = availableDates.map(date => {
           const dateObj = new Date(date + 'T00:00:00');
-          return dateObj.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric' 
+          return dateObj.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric'
           });
         }).join(', ');
-        
+
         availableDatesText.textContent = formattedDates;
-        
-        console.log(`jQuery datepicker configured with available dates:`, availableDates);
+
+        // Add event listener for bulk report generation
+        document.getElementById('generateBulkReport').addEventListener('click', generateBulkReport);
+
+        console.log(`jQuery datepickers configured with available dates:`, availableDates);
       }
     }
 
-    
+    function validateBulkDateRange() {
+      const startDate = document.getElementById('bulkStartDate').value;
+      const endDate = document.getElementById('bulkEndDate').value;
+      const bulkDateInfo = document.getElementById('bulkDateInfo');
+
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        if (start > end) {
+          bulkDateInfo.textContent = '❌ Start date cannot be after end date';
+          bulkDateInfo.style.color = '#dc3545';
+          return false;
+        }
+
+        // Count how many dates are in the range
+        const datesInRange = availableDates.filter(date => {
+          const dateObj = new Date(date);
+          return dateObj >= start && dateObj <= end;
+        });
+
+        if (datesInRange.length === 0) {
+          bulkDateInfo.textContent = '❌ No data available for the selected date range';
+          bulkDateInfo.style.color = '#dc3545';
+          return false;
+        }
+
+        bulkDateInfo.textContent = `✅ ${datesInRange.length} date(s) selected in range`;
+        bulkDateInfo.style.color = '#28a745';
+        return true;
+      } else {
+        bulkDateInfo.textContent = 'Select a date range to aggregate data across multiple campaigns';
+        bulkDateInfo.style.color = '#666';
+        return false;
+      }
+    }
+
+    async function generateBulkReport() {
+      const startDate = document.getElementById('bulkStartDate').value;
+      const endDate = document.getElementById('bulkEndDate').value;
+
+      if (!startDate || !endDate) {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "error";
+        resultDiv.textContent = "❌ Please select both start and end dates for the bulk report";
+        return;
+      }
+
+      if (!validateBulkDateRange()) {
+        return;
+      }
+
+      const resultDiv = document.getElementById("result");
+      resultDiv.className = "info";
+      resultDiv.textContent = "⏳ Generating bulk report...";
+
+      showLoading();
+
+      try {
+        // Find all sheets within the date range
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        const sheetsInRange = availableSheets.filter(sheetName => {
+          const dateMatch = sheetName.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (dateMatch) {
+            const sheetDate = new Date(dateMatch[1]);
+            return sheetDate >= start && sheetDate <= end;
+          }
+          return false;
+        });
+
+        if (sheetsInRange.length === 0) {
+          throw new Error('No sheets found in the selected date range');
+        }
+
+        console.log(`Found ${sheetsInRange.length} sheets in date range:`, sheetsInRange);
+
+        // Fetch and aggregate data from all sheets
+        const aggregatedData = await fetchBulkSheetData(sheetsInRange);
+
+        // Process the aggregated data
+        bulkProcessedData = processBulkData(aggregatedData);
+
+        // Update progress
+        resultDiv.className = "success";
+        resultDiv.textContent = `✅ Bulk report generated! Processed ${sheetsInRange.length} campaigns with ${bulkProcessedData.totalRecords} total records.`;
+
+        // Show bulk report results
+        displayBulkResults(sheetsInRange.length);
+
+      } catch (error) {
+        console.error('Bulk report error:', error);
+        resultDiv.className = "error";
+        resultDiv.textContent = `❌ Error generating bulk report: ${error.message}`;
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function fetchBulkSheetData(sheetNames) {
+      const aggregatedData = [];
+
+      for (let i = 0; i < sheetNames.length; i++) {
+        const sheetName = sheetNames[i];
+        const resultDiv = document.getElementById("result");
+
+        // Update progress
+        resultDiv.textContent = `⏳ Fetching data from ${sheetName} (${i + 1}/${sheetNames.length})...`;
+
+        try {
+          const payload = {
+            userToken: userCredential,
+            action: "getSheetContent",
+            sheetName
+          };
+
+          const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
+            method: "POST",
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload),
+            redirect: "follow"
+          });
+
+          const data = await response.json();
+
+          if (data.ok) {
+            // Add sheet identifier to each record
+            const sheetData = data.data.map(row => ({
+              ...row,
+              _sheetName: sheetName,
+              _sheetDate: sheetName.match(/^(\d{4}-\d{2}-\d{2})/)[1]
+            }));
+            aggregatedData.push(...sheetData);
+          } else {
+            console.warn(`Failed to fetch ${sheetName}:`, data.error);
+          }
+        } catch (error) {
+          console.warn(`Error fetching ${sheetName}:`, error);
+        }
+      }
+
+      return aggregatedData;
+    }
+
+    function processBulkData(allRows) {
+      console.log(`Processing ${allRows.length} total records from bulk data`);
+
+      if (!allRows || allRows.length < 2) {
+        throw new Error('Bulk data appears to be empty or invalid');
+      }
+
+      // First row is headers
+      const headers = allRows[0].map(header => String(header).trim());
+      console.log("Bulk data headers:", headers);
+
+      // Validate expected columns
+      const expectedColumns = ['Brand', 'Fname', 'Lname', 'Number', 'Initial Send Time', 'Failed', 'Response', 'Response Time (Central)', 'Conversation ID'];
+      for (let col of expectedColumns) {
+        if (!headers.includes(col)) {
+          throw new Error(`Missing expected column: ${col}. Found columns: ${headers.join(', ')}`);
+        }
+      }
+
+      const bulkProcessedData = {
+        noResponse: {},
+        responses: {},
+        stopResponses: {},
+        totalRecords: 0
+      };
+
+      // Process data rows (skip header row)
+      for (let i = 1; i < allRows.length; i++) {
+        const row = allRows[i];
+        if (!row || row.length === 0) continue;
+
+        try {
+          const record = {};
+
+          // Map each column value to its header
+          headers.forEach((header, index) => {
+            record[header] = String(row[index] || '').trim();
+          });
+
+          // Extract message columns
+          record.messages = [];
+          headers.forEach((header, index) => {
+            if (header.startsWith('Message ')) {
+              const messageText = String(row[index] || '').trim();
+              if (messageText) {
+                record.messages.push(messageText);
+              }
+            }
+          });
+
+          const brand = record.Brand || 'Unknown';
+          const hasResponse = record.Response === 'X';
+
+          // Initialize brand objects if they don't exist
+          if (!bulkProcessedData.noResponse[brand]) {
+            bulkProcessedData.noResponse[brand] = 0;
+          }
+          if (!bulkProcessedData.responses[brand]) {
+            bulkProcessedData.responses[brand] = [];
+          }
+          if (!bulkProcessedData.stopResponses[brand]) {
+            bulkProcessedData.stopResponses[brand] = 0;
+          }
+
+          if (hasResponse) {
+            const messages = record.messages || [];
+
+            // Check for STOP messages
+            const hasStopMessage = messages.some(message =>
+              message.includes('-> You:') && /\b(stop|STOP|Stop)\b/.test(message)
+            );
+
+            // Format name properly
+            let displayName = 'No Name';
+            const fname = record.Fname && record.Fname !== 'N/A' ? record.Fname.trim() : '';
+            const lname = record.Lname && record.Lname !== 'N/A' ? record.Lname.trim() : '';
+
+            if (fname && lname) {
+              displayName = `${fname} ${lname}`;
+            } else if (fname) {
+              displayName = fname;
+            } else if (lname) {
+              displayName = lname;
+            }
+
+            const responseRecord = {
+              name: displayName,
+              phone: record.Number || 'N/A',
+              responseTime: record['Response Time (Central)'] || 'N/A',
+              initialSendTime: record['Initial Send Time'] || 'N/A',
+              messages: messages,
+              hasStopMessage: hasStopMessage,
+              conversationId: record['Conversation ID'] || '',
+              sheetDate: record._sheetDate
+            };
+
+            bulkProcessedData.responses[brand].push(responseRecord);
+
+            if (hasStopMessage) {
+              bulkProcessedData.stopResponses[brand]++;
+            }
+          } else {
+            bulkProcessedData.noResponse[brand]++;
+          }
+
+          bulkProcessedData.totalRecords++;
+
+        } catch (error) {
+          console.error(`Error parsing row ${i} in bulk data:`, error.message);
+        }
+      }
+
+      console.log(`Successfully processed ${bulkProcessedData.totalRecords} bulk records`);
+      return bulkProcessedData;
+    }
+
+    function displayBulkResults(numSheets) {
+      // Hide single date results and show bulk results
+      document.getElementById('noResponseSection').style.display = 'none';
+      document.getElementById('responseSection').style.display = 'none';
+
+      // Update the response section header
+      const responseSection = document.getElementById('responseSection');
+      responseSection.style.display = 'block';
+
+      const header = responseSection.querySelector('.section-header');
+      header.innerHTML = `📊 Bulk Report Analysis (${numSheets} campaigns) - <span id="totalResponsesCount">${bulkProcessedData.totalRecords} Total Records</span>`;
+
+      // Update no response section
+      const noResponseSection = document.getElementById('noResponseSection');
+      noResponseSection.style.display = 'block';
+      const noResponseHeader = noResponseSection.querySelector('.section-header');
+      noResponseHeader.textContent = '📈 Bulk No Response Tallies by Brand';
+
+      // Display bulk stats
+      displayBulkNoResponseStats();
+      displayBulkStopResponseStats();
+      displayBulkResponseSections();
+
+      // Update the copy button to use bulk data
+      const copyBtn = document.querySelector('.control-btn[onclick*="copyQuickStats"]');
+      copyBtn.setAttribute('onclick', 'copyBulkQuickStats()');
+      copyBtn.innerHTML = '📊 Copy Bulk Stats';
+    }
+
+    function displayBulkNoResponseStats() {
+      const container = document.getElementById('noResponseStats');
+      container.innerHTML = '';
+
+      const table = document.createElement('table');
+
+      // Add header
+      const headerRow = document.createElement('tr');
+      headerRow.innerHTML = `
+        <th>Brand</th>
+        <th>No Response Count</th>
+      `;
+      table.appendChild(headerRow);
+
+      // Add brand rows
+      Object.entries(bulkProcessedData.noResponse).forEach(([brand, count]) => {
+        if (count > 0) {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${brand}</td>
+            <td class="number-cell">${count}</td>
+          `;
+          table.appendChild(row);
+        }
+      });
+
+      // Add total row
+      const total = Object.values(bulkProcessedData.noResponse).reduce((sum, count) => sum + count, 0);
+      const totalRow = document.createElement('tr');
+      totalRow.className = 'total-row';
+      totalRow.innerHTML = `
+        <td>Total</td>
+        <td class="number-cell">${total}</td>
+      `;
+      table.appendChild(totalRow);
+
+      container.appendChild(table);
+    }
+
+    function displayBulkStopResponseStats() {
+      const container = document.getElementById('stopResponsesStats');
+      container.innerHTML = '';
+
+      const totalStopResponses = Object.values(bulkProcessedData.stopResponses).reduce((sum, count) => sum + count, 0);
+
+      if (totalStopResponses > 0) {
+        const stopCard = document.createElement('div');
+        stopCard.className = 'stat-card';
+        stopCard.style.background = '#fff2f0';
+        stopCard.style.borderColor = '#ffccc7';
+        stopCard.innerHTML = `
+          <div class="stat-number" style="color: #a8071a;">${totalStopResponses}</div>
+          <div class="stat-label" style="color: #a8071a;">STOP Responses</div>
+        `;
+        container.appendChild(stopCard);
+      }
+    }
+
+    function displayBulkResponseSections() {
+      const container = document.getElementById('responseBrands');
+      container.innerHTML = '';
+
+      Object.entries(bulkProcessedData.responses).forEach(([brand, records]) => {
+        if (records.length > 0) {
+          const brandSection = createBulkBrandSection(brand, records);
+          container.appendChild(brandSection);
+        }
+      });
+    }
+
+    function createBulkBrandSection(brand, records) {
+      const section = document.createElement('div');
+      section.className = 'brand-section';
+
+      const header = document.createElement('div');
+      header.className = 'brand-header';
+      header.innerHTML = `
+        <div class="brand-name">${brand}</div>
+        <div class="brand-count">${records.length} responses</div>
+        <div class="toggle-icon">▼</div>
+      `;
+
+      const content = document.createElement('div');
+      content.className = 'brand-content';
+
+      records.forEach(record => {
+        const recordItem = createBulkRecordItem(record);
+        content.appendChild(recordItem);
+      });
+
+      header.addEventListener('click', () => {
+        const isVisible = content.style.display === 'block';
+        content.style.display = isVisible ? 'none' : 'block';
+        const icon = header.querySelector('.toggle-icon');
+        icon.classList.toggle('rotated', !isVisible);
+      });
+
+      section.appendChild(header);
+      section.appendChild(content);
+
+      return section;
+    }
+
+    function createBulkRecordItem(record) {
+      const item = document.createElement('div');
+      item.className = 'record-item';
+
+      const header = document.createElement('div');
+      header.className = 'record-header';
+
+      const recordInfo = document.createElement('div');
+      recordInfo.className = 'record-info';
+
+      const recordName = document.createElement('div');
+      recordName.className = 'record-name';
+      recordName.textContent = record.name;
+
+      const recordPhone = document.createElement('div');
+      recordPhone.className = 'record-phone';
+      recordPhone.textContent = record.phone;
+
+      const recordTime = document.createElement('div');
+      recordTime.className = 'record-time';
+      recordTime.textContent = `Responded: ${record.responseTime}`;
+
+      // Add sheet date indicator
+      const sheetDate = document.createElement('div');
+      sheetDate.className = 'record-time';
+      sheetDate.style.fontSize = '0.8rem';
+      sheetDate.style.color = '#999';
+      const dateObj = new Date(record.sheetDate);
+      sheetDate.textContent = `Campaign: ${dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+      recordInfo.appendChild(recordName);
+      recordInfo.appendChild(recordPhone);
+      recordInfo.appendChild(recordTime);
+      recordInfo.appendChild(sheetDate);
+
+      // Add Heymarket button if conversation ID exists
+      if (record.conversationId && record.conversationId.trim() !== '') {
+        const heymarketBtn = document.createElement('a');
+        heymarketBtn.className = 'heymarket-btn';
+        heymarketBtn.href = `https://app.heymarket.com/chats/${record.conversationId}`;
+        heymarketBtn.target = '_blank';
+        heymarketBtn.textContent = 'View on Heymarket';
+
+        heymarketBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+
+        recordInfo.appendChild(heymarketBtn);
+      }
+
+      const toggleIcon = document.createElement('div');
+      toggleIcon.className = 'toggle-icon';
+      toggleIcon.textContent = '▼';
+
+      header.appendChild(recordInfo);
+      header.appendChild(toggleIcon);
+
+      const messages = document.createElement('div');
+      messages.className = 'record-messages';
+
+      if (record.messages.length > 0) {
+        record.messages.forEach(messageText => {
+          const message = document.createElement('div');
+          message.className = 'message';
+
+          // Determine message direction
+          if (messageText.includes('You ->:')) {
+            message.classList.add('outgoing');
+            messageText = messageText.replace('You ->:', '').trim();
+
+            // Check for campaign follow-up messages
+            if (messageText.includes('just following up on your interest in a newborn session') &&
+                messageText.includes('Dates are booking quickly')) {
+              message.style.background = '#fffef0';
+              message.style.borderLeftColor = '#ffd700';
+              message.style.color = '#b8860b';
+            }
+          } else if (messageText.includes('-> You:')) {
+            message.classList.add('incoming');
+            messageText = messageText.replace('-> You:', '').trim();
+
+            // Highlight STOP messages
+            if (/\b(stop|STOP|Stop)\b/.test(messageText) && !messageText.toLowerCase().includes('reply stop to unsubscribe')) {
+              message.style.background = '#fff2f0';
+              message.style.borderLeftColor = '#a8071a';
+              message.style.color = '#a8071a';
+            }
+          }
+
+          message.innerHTML = `<div class="message-text">${escapeHtml(messageText)}</div>`;
+          messages.appendChild(message);
+        });
+      } else {
+        messages.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No message history available</div>';
+      }
+
+      header.addEventListener('click', () => {
+        const isVisible = messages.style.display === 'block';
+        messages.style.display = isVisible ? 'none' : 'block';
+        const icon = header.querySelector('.toggle-icon');
+        icon.classList.toggle('rotated', !isVisible);
+      });
+
+      item.appendChild(header);
+      item.appendChild(messages);
+
+      return item;
+    }
+
+    function copyBulkQuickStats() {
+      if (!bulkProcessedData) {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "error";
+        resultDiv.textContent = "❌ No bulk data available. Please generate a bulk report first.";
+        return;
+      }
+
+      // Generate bulk brand statistics table
+      const slackTable = generateBulkBrandStatsTable();
+
+      // Copy to clipboard
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(slackTable).then(() => {
+          const resultDiv = document.getElementById("result");
+          resultDiv.className = "success";
+          resultDiv.textContent = "✅ Copied bulk brand-specific response statistics to clipboard in Slack format!";
+        }).catch(err => {
+          fallbackCopyToClipboard(slackTable);
+        });
+      } else {
+        fallbackCopyToClipboard(slackTable);
+      }
+    }
+
+    function generateBulkBrandStatsTable() {
+      // Get all brands that have data
+      const brands = new Set([
+        ...Object.keys(bulkProcessedData.noResponse),
+        ...Object.keys(bulkProcessedData.responses),
+        ...Object.keys(bulkProcessedData.stopResponses)
+      ]);
+
+      if (brands.size === 0) {
+        return "No bulk data available";
+      }
+
+      // Calculate totals
+      const totals = {
+        noResponse: Object.values(bulkProcessedData.noResponse).reduce((sum, count) => sum + count, 0),
+        responses: Object.values(bulkProcessedData.responses).reduce((sum, records) => sum + records.length, 0),
+        stopResponses: Object.values(bulkProcessedData.stopResponses).reduce((sum, count) => sum + count, 0)
+      };
+
+      const totalLeads = totals.noResponse + totals.responses;
+
+      // Get date range information
+      const startDate = document.getElementById('bulkStartDate').value;
+      const endDate = document.getElementById('bulkEndDate').value;
+
+      let dateInfo = "";
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        if (start.getTime() === end.getTime()) {
+          dateInfo = `📊 Bulk Heymarket Campaign Report for ${start.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })}\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
+        } else {
+          dateInfo = `📊 Bulk Heymarket Campaign Report (${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
+        }
+      }
+
+      // Convert brands set to array and sort
+      const brandList = Array.from(brands).sort();
+
+      // Determine max lengths for proper alignment
+      let maxBrandLen = 'Brand'.length;
+      brandList.forEach(brand => {
+        maxBrandLen = Math.max(maxBrandLen, brand.length);
+      });
+
+      const lines = [];
+
+      // Header
+      const header = `\`| ${'Brand'.padEnd(maxBrandLen)} | No Response | Responses | Stop Responses |\``;
+      lines.push(header);
+      lines.push(`\`${'|'.padEnd(maxBrandLen + 2, '-')}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|\``); // Separator line
+
+      // Brand rows
+      brandList.forEach(brand => {
+        const noResponse = bulkProcessedData.noResponse[brand] || 0;
+        const responses = bulkProcessedData.responses[brand] ? bulkProcessedData.responses[brand].length : 0;
+        const stopResponses = bulkProcessedData.stopResponses[brand] || 0;
+
+        const brandContent = brand.padEnd(maxBrandLen);
+        const noRespContent = String(noResponse).padStart(11);
+        const respContent = String(responses).padStart(9);
+        const stopContent = String(stopResponses).padStart(14);
+
+        const row = `\`| ${brandContent} | ${noRespContent} | ${respContent} | ${stopContent} |\``;
+        lines.push(row);
+      });
+
+      // Total row
+      lines.push(`\`${'|'.padEnd(maxBrandLen + 2, '-')}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|\``); // Separator
+      const totalBrand = 'TOTAL'.padEnd(maxBrandLen);
+      const totalNoResp = String(totals.noResponse).padStart(11);
+      const totalResp = String(totals.responses).padStart(9);
+      const totalStop = String(totals.stopResponses).padStart(14);
+
+      const totalRow = `\`| ${totalBrand} | ${totalNoResp} | ${totalResp} | ${totalStop} |\``;
+      lines.push(totalRow);
+
+      return dateInfo + lines.join('\n');
+    }
+
+
   </script>
 </body>
 </html>
