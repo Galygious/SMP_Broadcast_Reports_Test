@@ -590,6 +590,7 @@
           <button class="control-btn collapse" onclick="collapseAllBrands()">Collapse All Brands</button>
           <button class="control-btn" onclick="expandAllRecords()">Expand All Conversations</button>
           <button class="control-btn collapse" onclick="collapseAllRecords()">Collapse All Conversations</button>
+          <button class="control-btn" onclick="copyQuickStats()" style="background: linear-gradient(135deg, #1890ff, #096dd9);">📋 Copy Quick Stats</button>
         </div>
         <div id="responseBrands">
           <!-- Brand sections will be populated here -->
@@ -1305,6 +1306,112 @@
         const icon = messages.previousElementSibling.querySelector('.toggle-icon');
         icon.classList.remove('rotated');
       });
+    }
+
+    function copyQuickStats() {
+      const allResponses = [];
+
+      // Collect all responses from all brands
+      Object.entries(processedData.responses).forEach(([brand, records]) => {
+        records.forEach(record => {
+          allResponses.push({
+            name: record.name || 'N/A',
+            phone: record.phone || 'N/A',
+            brand: brand,
+            conversationId: record.conversationId || ''
+          });
+        });
+      });
+
+      if (allResponses.length === 0) {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "info";
+        resultDiv.textContent = "No response data available to copy.";
+        return;
+      }
+
+      // Generate Slack-formatted table
+      const slackTable = generateSlackTable(allResponses);
+
+      // Copy to clipboard
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(slackTable).then(() => {
+          const resultDiv = document.getElementById("result");
+          resultDiv.className = "success";
+          resultDiv.textContent = `✅ Copied ${allResponses.length} responses to clipboard in Slack format!`;
+        }).catch(err => {
+          fallbackCopyToClipboard(slackTable);
+        });
+      } else {
+        fallbackCopyToClipboard(slackTable);
+      }
+    }
+
+    function generateSlackTable(responses) {
+      // Determine max lengths for each content field
+      let maxNameLen = 'Name'.length;
+      let maxPhoneLen = 'Phone'.length;
+      let maxBrandLen = 'Brand'.length;
+
+      // "Heymarket" link text length is fixed for display alignment
+      const HEYMARKET_DISPLAY_TEXT = ' Heymarket ';
+      const HEYMARKET_DISPLAY_TEXT_LEN = HEYMARKET_DISPLAY_TEXT.length;
+
+      responses.forEach(response => {
+        maxNameLen = Math.max(maxNameLen, response.name.length);
+        maxPhoneLen = Math.max(maxPhoneLen, response.phone.length);
+        maxBrandLen = Math.max(maxBrandLen, response.brand.length);
+      });
+
+      const lines = [];
+
+      // Construct the header line - everything in backticks except the profile link
+      let headerLine =
+          `\`| ${'Name'.padEnd(maxNameLen)} | Links | ${'Phone'.padEnd(maxPhoneLen)} | ${'Brand'.padEnd(maxBrandLen)} |\``;
+      lines.push(headerLine);
+
+      responses.forEach(response => {
+        const heymarketLink = response.conversationId ?
+          `https://app.heymarket.com/chats/${response.conversationId}` :
+          'https://app.heymarket.com';
+
+        // Data row construction - everything in backticks except the profile link
+        const nameContent = response.name.padEnd(maxNameLen);
+        const phoneContent = response.phone.padEnd(maxPhoneLen);
+        const brandContent = response.brand.padEnd(maxBrandLen);
+
+        let row =
+            `\`| ${nameContent} |\`` +
+            `[${HEYMARKET_DISPLAY_TEXT}](${heymarketLink})` +
+            `\`| ${phoneContent} | ${brandContent} |\``;
+        lines.push(row);
+      });
+
+      return lines.join('\n');
+    }
+
+    function fallbackCopyToClipboard(text) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      try {
+        document.execCommand('copy');
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "success";
+        resultDiv.textContent = `✅ Copied ${text.split('\n').length - 1} responses to clipboard in Slack format!`;
+      } catch (err) {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "error";
+        resultDiv.textContent = "❌ Failed to copy to clipboard";
+      }
+
+      document.body.removeChild(textArea);
     }
 
     // Date validation helper functions
