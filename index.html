@@ -528,8 +528,8 @@
     <div class="upload-section">
       <div class="upload-area" id="authArea">
         <div class="upload-icon">🔐</div>
-        <div class="upload-text">Sign in with Google to Access Sheets Data</div>
-        <div class="upload-subtext">Secure OAuth authentication for Heymarket campaign reports</div>
+        <div class="upload-text">Sign in with Google</div>
+        <div class="upload-subtext">One-click access to Heymarket campaign reports</div>
         <div id="googleSignInButton"></div>
         <div id="userProfile" class="hidden" style="margin-top: 15px;">
           <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
@@ -539,7 +539,7 @@
               <div id="userEmail" style="color: #666; font-size: 0.9rem;"></div>
             </div>
           </div>
-          <button class="btn" onclick="verifyAccess()" style="margin-top: 10px;">Access Data</button>
+          <div style="margin-top: 10px; color: #666; font-size: 0.9rem;">🔄 Automatically loading campaign data...</div>
           <button class="btn" onclick="signOut()" style="background: #f5222d; margin-top: 10px;">Sign Out</button>
         </div>
       </div>
@@ -733,11 +733,16 @@
         
         // Display user profile
         displayUserProfile(userInfo);
-        
+
         const resultDiv = document.getElementById("result");
         resultDiv.className = "success";
         resultDiv.textContent = `✅ Signed in as ${userInfo.name}`;
-        
+
+        // Automatically verify access and load sheet data (single-click flow)
+        setTimeout(() => {
+          verifyAccess();
+        }, 500); // Small delay to show the success message briefly
+
       } catch (error) {
         const resultDiv = document.getElementById("result");
         resultDiv.className = "error";
@@ -805,7 +810,7 @@
         const data = await response.json();
 
         if (data.ok) {
-          // Get available sheets
+          // Automatically proceed to get available sheets
           await getSheetNames();
         } else {
           throw new Error(data.error || "Access denied");
@@ -1650,16 +1655,25 @@
       try {
         // Find all sheets within the date range
         const start = new Date(startDate);
-        const end = new Date(endDate);
+        // Set end date to end of the day to include all sheets created on that date
+        const end = new Date(endDate + 'T23:59:59.999');
+
+        console.log('Date range filtering:');
+        console.log('Start date:', start.toISOString());
+        console.log('End date:', end.toISOString());
 
         const sheetsInRange = availableSheets.filter(sheetName => {
           const dateMatch = sheetName.match(/^(\d{4}-\d{2}-\d{2})/);
           if (dateMatch) {
             const sheetDate = new Date(dateMatch[1]);
-            return sheetDate >= start && sheetDate <= end;
+            const isInRange = sheetDate >= start && sheetDate <= end;
+            console.log(`Sheet ${sheetName}: ${sheetDate.toISOString()} - ${isInRange ? 'INCLUDED' : 'EXCLUDED'}`);
+            return isInRange;
           }
           return false;
         });
+
+        console.log(`Total sheets found in range: ${sheetsInRange.length}`);
 
         if (sheetsInRange.length === 0) {
           throw new Error('No sheets found in the selected date range');
@@ -1667,20 +1681,40 @@
 
         console.log(`Found ${sheetsInRange.length} sheets in date range:`, sheetsInRange);
 
-        // Fetch and aggregate data from all sheets
-        const aggregatedData = await fetchBulkSheetData(sheetsInRange);
+        // Fetch all sheets in a single bulk request
+        resultDiv.textContent = `⏳ Fetching data from ${sheetsInRange.length} campaigns...`;
 
-        // Process the aggregated data
-        console.log("Aggregated data before processing:", aggregatedData);
-        console.log("Aggregated data length:", aggregatedData.length);
+        const payload = {
+          userToken: userCredential,
+          action: "getBulkData",
+          sheetNames: sheetsInRange,
+          pageSize: 10000 // Large page size for bulk operations
+        };
 
-        bulkProcessedData = processBulkData(aggregatedData);
+        const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
+          method: "POST",
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload),
+          redirect: "follow"
+        });
+
+        const bulkResponse = await response.json();
+
+        if (!bulkResponse.ok) {
+          throw new Error(bulkResponse.error || "Failed to fetch bulk data");
+        }
+
+        console.log("Bulk response:", bulkResponse);
+        console.log("Bulk data length:", bulkResponse.data?.length || 0);
+
+        // Process the bulk data directly
+        bulkProcessedData = processBulkData(bulkResponse.data);
 
         console.log("Bulk processed data result:", bulkProcessedData);
 
         // Update progress
         resultDiv.className = "success";
-        resultDiv.textContent = `✅ Bulk report generated! Processed ${sheetsInRange.length} campaigns with ${bulkProcessedData.totalRecords} total records.`;
+        resultDiv.textContent = `✅ Bulk report generated! Successfully processed ${bulkResponse.successfulSheets}/${bulkResponse.totalSheets} campaigns with ${bulkProcessedData.totalRecords} total records.`;
 
         // Show bulk report results
         displayBulkResults(sheetsInRange.length);
@@ -1694,83 +1728,9 @@
       }
     }
 
-    async function fetchBulkSheetData(sheetNames) {
-      const aggregatedData = [];
-      console.log("Starting bulk data fetch for sheets:", sheetNames);
-
-      for (let i = 0; i < sheetNames.length; i++) {
-        const sheetName = sheetNames[i];
-        const resultDiv = document.getElementById("result");
-
-        // Update progress
-        resultDiv.textContent = `⏳ Fetching data from ${sheetName} (${i + 1}/${sheetNames.length})...`;
-        console.log(`Fetching sheet ${i + 1}/${sheetNames.length}: ${sheetName}`);
-
-        try {
-          const payload = {
-            userToken: userCredential,
-            action: "getFilteredData",
-            sheetName: sheetName,
-            page: 1,
-            pageSize: 1000 // Large page size for bulk operations
-          };
-
-          const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
-            method: "POST",
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload),
-            redirect: "follow"
-          });
-
-          const data = await response.json();
-
-          if (data.ok) {
-            console.log(`Filtered data from ${sheetName}:`, data);
-            console.log(`Data type: ${typeof data.data}, Is array: ${Array.isArray(data.data)}`);
-
-            if (!Array.isArray(data.data)) {
-              console.error(`Filtered data from ${sheetName} is not an array:`, data.data);
-              throw new Error(`Filtered data from sheet ${sheetName} is not in expected array format`);
-            }
-
-            // The filtered data already includes headers in the first row
-            // Add sheet identifier to each record (skip header row)
-            const sheetData = data.data.map((row, index) => {
-              if (index === 0) {
-                // First row is headers, add our custom headers
-                return [
-                  ...row,
-                  '_sheetName',
-                  '_sheetDate'
-                ];
-              }
-
-              console.log(`Processing row:`, row, `Type: ${typeof row}, Is array: ${Array.isArray(row)}`);
-              if (!Array.isArray(row)) {
-                console.error(`Row is not an array:`, row);
-                return row; // Return as-is if not an array
-              }
-              return [
-                ...row,
-                sheetName, // _sheetName
-                sheetName.match(/^(\d{4}-\d{2}-\d{2})/)[1] // _sheetDate
-              ];
-            });
-            aggregatedData.push(...sheetData);
-
-            console.log(`Successfully processed ${data.totalRows || data.data.length} records from ${sheetName}`);
-          } else {
-            console.warn(`Failed to fetch ${sheetName}:`, data.error);
-          }
-        } catch (error) {
-          console.warn(`Error fetching ${sheetName}:`, error);
-        }
-      }
-
-      console.log("Final aggregated data:", aggregatedData);
-      console.log("Aggregated data length:", aggregatedData.length);
-      return aggregatedData;
-    }
+    // DEPRECATED: fetchBulkSheetData function replaced by getBulkData endpoint
+    // The new approach fetches all sheets in a single request instead of multiple individual requests
+    // This provides much better performance and reduces API calls significantly
 
     function processBulkData(allRows) {
       console.log(`Processing ${allRows.length} total records from bulk data`);
@@ -2215,7 +2175,10 @@
             day: 'numeric'
           })}\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
         } else {
-          dateInfo = `📊 Bulk Heymarket Campaign Report (${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
+          // Use the original selected dates for display, not the adjusted end date
+          const displayStart = new Date(startDate);
+          const displayEnd = new Date(endDate);
+          dateInfo = `📊 Bulk Heymarket Campaign Report (${displayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${displayEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})\n📈 Total Leads: ${totalLeads} | Response Rate: ${totals.responses > 0 ? ((totals.responses / totalLeads) * 100).toFixed(1) : 0}%\n\n`;
         }
       }
 
