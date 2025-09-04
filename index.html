@@ -1393,7 +1393,7 @@
       // Header
       const header = `\`| ${'Brand'.padEnd(maxBrandLen)} | No Response | Responses | Stop Responses |\``;
       lines.push(header);
-      lines.push(`|${'-'.repeat(maxBrandLen + 2)}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|`); // Separator line
+      lines.push(`\`${'|'.padEnd(maxBrandLen + 2, '-')}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|\``); // Separator line
 
       // Brand rows
       brandList.forEach(brand => {
@@ -1411,7 +1411,7 @@
       });
 
       // Total row
-      lines.push(`|${'-'.repeat(maxBrandLen + 2)}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|`); // Separator
+      lines.push(`\`${'|'.padEnd(maxBrandLen + 2, '-')}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|\``); // Separator
       const totalBrand = 'TOTAL'.padEnd(maxBrandLen);
       const totalNoResp = String(totals.noResponse).padStart(11);
       const totalResp = String(totals.responses).padStart(9);
