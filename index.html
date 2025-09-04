@@ -34,12 +34,39 @@
       text-align: center;
       margin-bottom: 30px;
       color: white;
+      position: relative;
     }
 
     .header h1 {
       font-size: 2.5rem;
       margin-bottom: 10px;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .header-actions {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: none;
+      z-index: 1000;
+    }
+
+    .logout-btn {
+      background: rgba(255, 255, 255, 0.9);
+      color: #667eea;
+      border: 2px solid #667eea;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .logout-btn:hover {
+      background: #667eea;
+      color: white;
+      transform: translateY(-1px);
     }
 
     .header p {
@@ -501,15 +528,31 @@
       .container {
         padding: 10px;
       }
-      
+
+      .header {
+        margin-bottom: 20px;
+      }
+
       .header h1 {
         font-size: 2rem;
       }
-      
+
+      .header-actions {
+        position: static;
+        display: flex;
+        justify-content: center;
+        margin-top: 15px;
+      }
+
+      .logout-btn {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+      }
+
       .stats-grid {
         grid-template-columns: 1fr;
       }
-      
+
       .record-info {
         flex-direction: column;
         gap: 5px;
@@ -523,13 +566,18 @@
     <div class="header">
       <h1>📊 Campaign Analysis</h1>
       <p>View reports directly from Google Sheets</p>
+      <div class="header-actions">
+        <button class="logout-btn" onclick="signOut()" title="Sign out and return to login">
+          🚪 Sign Out
+        </button>
+      </div>
     </div>
 
     <div class="upload-section">
       <div class="upload-area" id="authArea">
         <div class="upload-icon">🔐</div>
         <div class="upload-text">Sign in with Google</div>
-        <div class="upload-subtext">One-click access to Heymarket campaign reports</div>
+        <div class="upload-subtext">Secure authentication for Heymarket campaign reports</div>
         <div id="googleSignInButton"></div>
         <div id="userProfile" class="hidden" style="margin-top: 15px;">
           <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
@@ -539,7 +587,7 @@
               <div id="userEmail" style="color: #666; font-size: 0.9rem;"></div>
             </div>
           </div>
-          <div style="margin-top: 10px; color: #666; font-size: 0.9rem;">🔄 Automatically loading campaign data...</div>
+          <button class="btn" onclick="initSession()" style="margin-top: 10px;">Connect to Sheets</button>
           <button class="btn" onclick="signOut()" style="background: #f5222d; margin-top: 10px;">Sign Out</button>
         </div>
       </div>
@@ -638,54 +686,8 @@
     };
     let bulkProcessedData = null; // For storing aggregated bulk data
 
-    // Cache authentication state to speed up page refreshes
-    function checkAuthCache() {
-      const cachedToken = sessionStorage.getItem('userToken');
-      const cachedSheets = sessionStorage.getItem('availableSheets');
-
-      if (cachedToken && cachedSheets) {
-        console.log('🔄 Found cached authentication data');
-        userCredential = cachedToken;
-        availableSheets = JSON.parse(cachedSheets);
-
-        // Extract available dates from cached sheet names
-        extractAvailableDates();
-        setupDateLimits();
-
-        // Show user as signed in
-        try {
-          const userInfo = parseJwt(cachedToken);
-          displayUserProfile(userInfo);
-        } catch (e) {
-          console.warn('Failed to parse cached token:', e);
-          sessionStorage.removeItem('userToken');
-          sessionStorage.removeItem('availableSheets');
-          return false;
-        }
-
-        // Hide auth section and show date selector
-        const authSection = document.getElementById("authArea").parentElement;
-        authSection.style.display = "none";
-        const dateSelector = document.getElementById("dateSelector");
-        dateSelector.classList.remove("hidden");
-
-        const resultDiv = document.getElementById("result");
-        resultDiv.className = "success";
-        resultDiv.textContent = "✅ Session restored from cache!";
-
-        return true;
-      }
-      return false;
-    }
-
-    // Save authentication state to cache
-    function saveAuthCache() {
-      if (userCredential && availableSheets.length > 0) {
-        sessionStorage.setItem('userToken', userCredential);
-        sessionStorage.setItem('availableSheets', JSON.stringify(availableSheets));
-        console.log('💾 Authentication state cached');
-      }
-    }
+    // Authentication flow is now optimized but requires user interaction
+    // No automatic caching to ensure user control over authentication
 
     // Check if this is a userscript authentication request
     function checkUserscriptAuth() {
@@ -748,12 +750,6 @@
       // Check if this is a userscript auth request first
       const isUserscriptAuth = checkUserscriptAuth();
 
-      // Check for cached authentication first
-      if (!isUserscriptAuth && checkAuthCache()) {
-        console.log('✅ Session restored from cache - skipping OAuth initialization');
-        return;
-      }
-
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: function(response) {
@@ -791,12 +787,7 @@
 
         const resultDiv = document.getElementById("result");
         resultDiv.className = "success";
-        resultDiv.textContent = `✅ Signed in as ${userInfo.name}`;
-
-        // Automatically initialize session and load sheet data (single-click flow)
-        setTimeout(() => {
-          initSession();
-        }, 500); // Small delay to show the success message briefly
+        resultDiv.textContent = `✅ Signed in as ${userInfo.name}. Click "Connect to Sheets" to access your campaign data.`;
 
       } catch (error) {
         const resultDiv = document.getElementById("result");
@@ -820,18 +811,19 @@
       document.getElementById("userName").textContent = userInfo.name;
       document.getElementById("userEmail").textContent = userInfo.email;
       document.getElementById("userPhoto").src = userInfo.picture;
+
+      // Show header logout button
+      document.querySelector('.header-actions').style.display = 'block';
     }
 
     function signOut() {
       google.accounts.id.disableAutoSelect();
       userCredential = null;
 
-      // Clear authentication cache
-      sessionStorage.removeItem('userToken');
-      sessionStorage.removeItem('availableSheets');
-      console.log('🗑️ Authentication cache cleared');
+      // Hide header logout button
+      document.querySelector('.header-actions').style.display = 'none';
 
-      // Reset UI
+      // Reset UI to initial state
       document.getElementById("googleSignInButton").style.display = "block";
       document.getElementById("userProfile").classList.add("hidden");
       document.getElementById("dateSelector").classList.add("hidden");
@@ -891,8 +883,7 @@
             dateSelector.classList.add("fade-in");
           }, 300);
 
-          // Cache the authentication state for faster future loads
-          saveAuthCache();
+          // Authentication state is not cached - fresh login required each time
         } else {
           throw new Error(data.error || "Access denied");
         }
