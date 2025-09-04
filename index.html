@@ -889,10 +889,12 @@
       showLoading();
 
       try {
-        const payload = { 
-          userToken: userCredential, 
-          action: "getSheetContent", 
-          sheetName 
+        const payload = {
+          userToken: userCredential,
+          action: "getFilteredData",
+          sheetName: sheetName,
+          page: 1,
+          pageSize: 1000 // Large page size for single sheet operations
         };
         const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
           method: "POST",
@@ -902,17 +904,17 @@
         const data = await response.json();
 
         if (data.ok) {
-          console.log("Raw data received:", data.data);
+          console.log("Filtered data received:", data);
           console.log("Data type:", typeof data.data, "Is array:", Array.isArray(data.data));
 
-          // Work directly with 2D array from Sheets
+          // Work directly with 2D array from filtered data
           const rows = data.data;
 
           if (!Array.isArray(rows)) {
-            throw new Error(`Sheet data is not in expected array format. Type: ${typeof rows}, Value: ${JSON.stringify(rows)}`);
+            throw new Error(`Filtered data is not in expected array format. Type: ${typeof rows}, Value: ${JSON.stringify(rows)}`);
           }
 
-          console.log("Raw data rows received:", rows.length);
+          console.log("Filtered data rows received:", rows.length);
           console.log("First few rows:", rows.slice(0, 3));
 
           parseSheetData(rows);
@@ -920,7 +922,7 @@
           displayResults();
 
           resultDiv.className = "success";
-          resultDiv.textContent = `✅ Sheet processed successfully! Analyzed ${rawData.length} records.`;
+          resultDiv.textContent = `✅ Sheet processed successfully! Analyzed ${rawData.length} records out of ${data.totalRows || rows.length - 1} total records.`;
         } else {
           throw new Error(data.error || "Failed to fetch content");
         }
@@ -1583,9 +1585,14 @@
       const endDate = document.getElementById('bulkEndDate').value;
       const bulkDateInfo = document.getElementById('bulkDateInfo');
 
+      console.log("Validating bulk date range:", { startDate, endDate });
+      console.log("Available dates:", availableDates);
+
       if (startDate && endDate) {
         const start = new Date(startDate);
         const end = new Date(endDate);
+
+        console.log("Parsed dates:", { start, end });
 
         if (start > end) {
           bulkDateInfo.textContent = '❌ Start date cannot be after end date';
@@ -1596,8 +1603,12 @@
         // Count how many dates are in the range
         const datesInRange = availableDates.filter(date => {
           const dateObj = new Date(date);
-          return dateObj >= start && dateObj <= end;
+          const isInRange = dateObj >= start && dateObj <= end;
+          console.log(`Date ${date} (${dateObj}) in range: ${isInRange}`);
+          return isInRange;
         });
+
+        console.log("Dates in range:", datesInRange);
 
         if (datesInRange.length === 0) {
           bulkDateInfo.textContent = '❌ No data available for the selected date range';
@@ -1660,7 +1671,12 @@
         const aggregatedData = await fetchBulkSheetData(sheetsInRange);
 
         // Process the aggregated data
+        console.log("Aggregated data before processing:", aggregatedData);
+        console.log("Aggregated data length:", aggregatedData.length);
+
         bulkProcessedData = processBulkData(aggregatedData);
+
+        console.log("Bulk processed data result:", bulkProcessedData);
 
         // Update progress
         resultDiv.className = "success";
@@ -1680,6 +1696,7 @@
 
     async function fetchBulkSheetData(sheetNames) {
       const aggregatedData = [];
+      console.log("Starting bulk data fetch for sheets:", sheetNames);
 
       for (let i = 0; i < sheetNames.length; i++) {
         const sheetName = sheetNames[i];
@@ -1687,12 +1704,15 @@
 
         // Update progress
         resultDiv.textContent = `⏳ Fetching data from ${sheetName} (${i + 1}/${sheetNames.length})...`;
+        console.log(`Fetching sheet ${i + 1}/${sheetNames.length}: ${sheetName}`);
 
         try {
           const payload = {
             userToken: userCredential,
-            action: "getSheetContent",
-            sheetName
+            action: "getFilteredData",
+            sheetName: sheetName,
+            page: 1,
+            pageSize: 1000 // Large page size for bulk operations
           };
 
           const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
@@ -1705,16 +1725,26 @@
           const data = await response.json();
 
           if (data.ok) {
-            console.log(`Raw data from ${sheetName}:`, data.data);
+            console.log(`Filtered data from ${sheetName}:`, data);
             console.log(`Data type: ${typeof data.data}, Is array: ${Array.isArray(data.data)}`);
 
             if (!Array.isArray(data.data)) {
-              console.error(`Data from ${sheetName} is not an array:`, data.data);
-              throw new Error(`Data from sheet ${sheetName} is not in expected array format`);
+              console.error(`Filtered data from ${sheetName} is not an array:`, data.data);
+              throw new Error(`Filtered data from sheet ${sheetName} is not in expected array format`);
             }
 
-            // Add sheet identifier to each record
-            const sheetData = data.data.map(row => {
+            // The filtered data already includes headers in the first row
+            // Add sheet identifier to each record (skip header row)
+            const sheetData = data.data.map((row, index) => {
+              if (index === 0) {
+                // First row is headers, add our custom headers
+                return [
+                  ...row,
+                  '_sheetName',
+                  '_sheetDate'
+                ];
+              }
+
               console.log(`Processing row:`, row, `Type: ${typeof row}, Is array: ${Array.isArray(row)}`);
               if (!Array.isArray(row)) {
                 console.error(`Row is not an array:`, row);
@@ -1727,6 +1757,8 @@
               ];
             });
             aggregatedData.push(...sheetData);
+
+            console.log(`Successfully processed ${data.totalRows || data.data.length} records from ${sheetName}`);
           } else {
             console.warn(`Failed to fetch ${sheetName}:`, data.error);
           }
@@ -1735,6 +1767,8 @@
         }
       }
 
+      console.log("Final aggregated data:", aggregatedData);
+      console.log("Aggregated data length:", aggregatedData.length);
       return aggregatedData;
     }
 
@@ -1785,8 +1819,8 @@
           });
 
           // Add sheet information (stored at the end of the row)
-          record._sheetName = row[headers.length] || sheetName; // fallback to current sheetName
-          record._sheetDate = row[headers.length + 1] || sheetName.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || 'unknown';
+          record._sheetName = row[headers.length] || 'Unknown Sheet'; // fallback to generic name
+          record._sheetDate = row[headers.length + 1] || 'unknown-date';
 
           // Extract message columns
           record.messages = [];
@@ -1862,6 +1896,7 @@
       }
 
       console.log(`Successfully processed ${bulkProcessedData.totalRecords} bulk records`);
+      console.log("Final bulk processed data:", bulkProcessedData);
       return bulkProcessedData;
     }
 
@@ -2107,10 +2142,21 @@
     }
 
     function copyBulkQuickStats() {
-      if (!bulkProcessedData) {
+      console.log("Checking bulk data:", bulkProcessedData);
+
+      if (!bulkProcessedData || !bulkProcessedData.responses) {
         const resultDiv = document.getElementById("result");
         resultDiv.className = "error";
         resultDiv.textContent = "❌ No bulk data available. Please generate a bulk report first.";
+        return;
+      }
+
+      // Check if there's actually data
+      const totalRecords = bulkProcessedData.totalRecords || 0;
+      if (totalRecords === 0) {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "error";
+        resultDiv.textContent = "❌ Bulk data contains no records. Check the console for processing errors.";
         return;
       }
 
