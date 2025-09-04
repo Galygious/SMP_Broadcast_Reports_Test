@@ -590,7 +590,7 @@
           <button class="control-btn collapse" onclick="collapseAllBrands()">Collapse All Brands</button>
           <button class="control-btn" onclick="expandAllRecords()">Expand All Conversations</button>
           <button class="control-btn collapse" onclick="collapseAllRecords()">Collapse All Conversations</button>
-          <button class="control-btn" onclick="copyQuickStats()" style="background: linear-gradient(135deg, #1890ff, #096dd9);">📋 Copy Quick Stats</button>
+          <button class="control-btn" onclick="copyQuickStats()" style="background: linear-gradient(135deg, #1890ff, #096dd9);">📊 Copy Brand Stats</button>
         </div>
         <div id="responseBrands">
           <!-- Brand sections will be populated here -->
@@ -1309,36 +1309,15 @@
     }
 
     function copyQuickStats() {
-      const allResponses = [];
-
-      // Collect all responses from all brands
-      Object.entries(processedData.responses).forEach(([brand, records]) => {
-        records.forEach(record => {
-          allResponses.push({
-            name: record.name || 'N/A',
-            phone: record.phone || 'N/A',
-            brand: brand,
-            conversationId: record.conversationId || ''
-          });
-        });
-      });
-
-      if (allResponses.length === 0) {
-        const resultDiv = document.getElementById("result");
-        resultDiv.className = "info";
-        resultDiv.textContent = "No response data available to copy.";
-        return;
-      }
-
-      // Generate Slack-formatted table
-      const slackTable = generateSlackTable(allResponses);
+      // Generate brand-specific statistics table
+      const slackTable = generateBrandStatsTable();
 
       // Copy to clipboard
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(slackTable).then(() => {
           const resultDiv = document.getElementById("result");
           resultDiv.className = "success";
-          resultDiv.textContent = `✅ Copied ${allResponses.length} responses to clipboard in Slack format!`;
+          resultDiv.textContent = "✅ Copied brand-specific response statistics to clipboard in Slack format!";
         }).catch(err => {
           fallbackCopyToClipboard(slackTable);
         });
@@ -1347,45 +1326,65 @@
       }
     }
 
-    function generateSlackTable(responses) {
-      // Determine max lengths for each content field
-      let maxNameLen = 'Name'.length;
-      let maxPhoneLen = 'Phone'.length;
+    function generateBrandStatsTable() {
+      // Get all brands that have data
+      const brands = new Set([
+        ...Object.keys(processedData.noResponse),
+        ...Object.keys(processedData.responses),
+        ...Object.keys(processedData.stopResponses)
+      ]);
+
+      if (brands.size === 0) {
+        return "No data available";
+      }
+
+      // Calculate totals
+      const totals = {
+        noResponse: Object.values(processedData.noResponse).reduce((sum, count) => sum + count, 0),
+        responses: Object.values(processedData.responses).reduce((sum, records) => sum + records.length, 0),
+        stopResponses: Object.values(processedData.stopResponses).reduce((sum, count) => sum + count, 0)
+      };
+
+      // Convert brands set to array and sort
+      const brandList = Array.from(brands).sort();
+
+      // Determine max lengths for proper alignment
       let maxBrandLen = 'Brand'.length;
-
-      // "Heymarket" link text length is fixed for display alignment
-      const HEYMARKET_DISPLAY_TEXT = ' Heymarket ';
-      const HEYMARKET_DISPLAY_TEXT_LEN = HEYMARKET_DISPLAY_TEXT.length;
-
-      responses.forEach(response => {
-        maxNameLen = Math.max(maxNameLen, response.name.length);
-        maxPhoneLen = Math.max(maxPhoneLen, response.phone.length);
-        maxBrandLen = Math.max(maxBrandLen, response.brand.length);
+      brandList.forEach(brand => {
+        maxBrandLen = Math.max(maxBrandLen, brand.length);
       });
 
       const lines = [];
 
-      // Construct the header line - everything in backticks except the profile link
-      let headerLine =
-          `\`| ${'Name'.padEnd(maxNameLen)} | Links | ${'Phone'.padEnd(maxPhoneLen)} | ${'Brand'.padEnd(maxBrandLen)} |\``;
-      lines.push(headerLine);
+      // Header
+      const header = `\`| ${'Brand'.padEnd(maxBrandLen)} | No Response | Responses | Stop Responses |\``;
+      lines.push(header);
+      lines.push(`|${'-'.repeat(maxBrandLen + 2)}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|`); // Separator line
 
-      responses.forEach(response => {
-        const heymarketLink = response.conversationId ?
-          `https://app.heymarket.com/chats/${response.conversationId}` :
-          'https://app.heymarket.com';
+      // Brand rows
+      brandList.forEach(brand => {
+        const noResponse = processedData.noResponse[brand] || 0;
+        const responses = processedData.responses[brand] ? processedData.responses[brand].length : 0;
+        const stopResponses = processedData.stopResponses[brand] || 0;
 
-        // Data row construction - everything in backticks except the profile link
-        const nameContent = response.name.padEnd(maxNameLen);
-        const phoneContent = response.phone.padEnd(maxPhoneLen);
-        const brandContent = response.brand.padEnd(maxBrandLen);
+        const brandContent = brand.padEnd(maxBrandLen);
+        const noRespContent = String(noResponse).padStart(11);
+        const respContent = String(responses).padStart(9);
+        const stopContent = String(stopResponses).padStart(14);
 
-        let row =
-            `\`| ${nameContent} |\`` +
-            `[${HEYMARKET_DISPLAY_TEXT}](${heymarketLink})` +
-            `\`| ${phoneContent} | ${brandContent} |\``;
+        const row = `\`| ${brandContent} | ${noRespContent} | ${respContent} | ${stopContent} |\``;
         lines.push(row);
       });
+
+      // Total row
+      lines.push(`|${'-'.repeat(maxBrandLen + 2)}|${'-'.repeat(13)}|${'-'.repeat(11)}|${'-'.repeat(16)}|`); // Separator
+      const totalBrand = 'TOTAL'.padEnd(maxBrandLen);
+      const totalNoResp = String(totals.noResponse).padStart(11);
+      const totalResp = String(totals.responses).padStart(9);
+      const totalStop = String(totals.stopResponses).padStart(14);
+
+      const totalRow = `\`| ${totalBrand} | ${totalNoResp} | ${totalResp} | ${totalStop} |\``;
+      lines.push(totalRow);
 
       return lines.join('\n');
     }
@@ -1404,7 +1403,7 @@
         document.execCommand('copy');
         const resultDiv = document.getElementById("result");
         resultDiv.className = "success";
-        resultDiv.textContent = `✅ Copied ${text.split('\n').length - 1} responses to clipboard in Slack format!`;
+        resultDiv.textContent = "✅ Copied brand-specific response statistics to clipboard in Slack format!";
       } catch (err) {
         const resultDiv = document.getElementById("result");
         resultDiv.className = "error";
