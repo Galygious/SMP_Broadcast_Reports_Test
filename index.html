@@ -638,6 +638,55 @@
     };
     let bulkProcessedData = null; // For storing aggregated bulk data
 
+    // Cache authentication state to speed up page refreshes
+    function checkAuthCache() {
+      const cachedToken = sessionStorage.getItem('userToken');
+      const cachedSheets = sessionStorage.getItem('availableSheets');
+
+      if (cachedToken && cachedSheets) {
+        console.log('🔄 Found cached authentication data');
+        userCredential = cachedToken;
+        availableSheets = JSON.parse(cachedSheets);
+
+        // Extract available dates from cached sheet names
+        extractAvailableDates();
+        setupDateLimits();
+
+        // Show user as signed in
+        try {
+          const userInfo = parseJwt(cachedToken);
+          displayUserProfile(userInfo);
+        } catch (e) {
+          console.warn('Failed to parse cached token:', e);
+          sessionStorage.removeItem('userToken');
+          sessionStorage.removeItem('availableSheets');
+          return false;
+        }
+
+        // Hide auth section and show date selector
+        const authSection = document.getElementById("authArea").parentElement;
+        authSection.style.display = "none";
+        const dateSelector = document.getElementById("dateSelector");
+        dateSelector.classList.remove("hidden");
+
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "success";
+        resultDiv.textContent = "✅ Session restored from cache!";
+
+        return true;
+      }
+      return false;
+    }
+
+    // Save authentication state to cache
+    function saveAuthCache() {
+      if (userCredential && availableSheets.length > 0) {
+        sessionStorage.setItem('userToken', userCredential);
+        sessionStorage.setItem('availableSheets', JSON.stringify(availableSheets));
+        console.log('💾 Authentication state cached');
+      }
+    }
+
     // Check if this is a userscript authentication request
     function checkUserscriptAuth() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -698,7 +747,13 @@
     window.onload = function() {
       // Check if this is a userscript auth request first
       const isUserscriptAuth = checkUserscriptAuth();
-      
+
+      // Check for cached authentication first
+      if (!isUserscriptAuth && checkAuthCache()) {
+        console.log('✅ Session restored from cache - skipping OAuth initialization');
+        return;
+      }
+
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: function(response) {
@@ -706,19 +761,19 @@
           if (isUserscriptAuth && handleUserscriptAuthSuccess(response.credential)) {
             return; // Redirecting to userscript, don't process normal flow
           }
-          
+
           // Normal web app flow
           handleSignInResponse(response);
         },
         auto_select: false,
         cancel_on_tap_outside: false
       });
-      
+
       google.accounts.id.renderButton(
         document.getElementById("googleSignInButton"),
-        { 
-          theme: "outline", 
-          size: "large", 
+        {
+          theme: "outline",
+          size: "large",
           width: "300",
           type: "standard"
         }
@@ -738,9 +793,9 @@
         resultDiv.className = "success";
         resultDiv.textContent = `✅ Signed in as ${userInfo.name}`;
 
-        // Automatically verify access and load sheet data (single-click flow)
+        // Automatically initialize session and load sheet data (single-click flow)
         setTimeout(() => {
-          verifyAccess();
+          initSession();
         }, 500); // Small delay to show the success message briefly
 
       } catch (error) {
@@ -770,37 +825,42 @@
     function signOut() {
       google.accounts.id.disableAutoSelect();
       userCredential = null;
-      
+
+      // Clear authentication cache
+      sessionStorage.removeItem('userToken');
+      sessionStorage.removeItem('availableSheets');
+      console.log('🗑️ Authentication cache cleared');
+
       // Reset UI
       document.getElementById("googleSignInButton").style.display = "block";
       document.getElementById("userProfile").classList.add("hidden");
       document.getElementById("dateSelector").classList.add("hidden");
       document.getElementById("noResponseSection").style.display = "none";
       document.getElementById("responseSection").style.display = "none";
-      
+
       const resultDiv = document.getElementById("result");
       resultDiv.textContent = "";
       resultDiv.className = "";
     }
 
-    async function verifyAccess() {
+    async function initSession() {
       if (!userCredential) {
         const resultDiv = document.getElementById("result");
         resultDiv.className = "error";
         resultDiv.textContent = "❌ Please sign in first";
         return;
       }
-      
+
       const resultDiv = document.getElementById("result");
-      resultDiv.textContent = "Verifying access permissions...";
+      resultDiv.textContent = "Initializing session...";
       resultDiv.className = "info";
 
       try {
-        const payload = { 
-          userToken: userCredential, 
-          action: "verifyAccess" 
+        const payload = {
+          userToken: userCredential,
+          action: "initSession"
         };
-        
+
         const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
           method: "POST",
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -810,62 +870,40 @@
         const data = await response.json();
 
         if (data.ok) {
-          // Automatically proceed to get available sheets
-          await getSheetNames();
-        } else {
-          throw new Error(data.error || "Access denied");
-        }
-      } catch (err) {
-        resultDiv.className = "error";
-        resultDiv.innerHTML = `❌ Error verifying access: ${err.message}<br><button class="btn" style="margin-top: 10px;" onclick="verifyAccess()">Retry</button>`;
-      }
-    }
+          // Process the combined response
+          availableSheets = data.sheetNames || [];
 
-    async function getSheetNames() {
-      try {
-        const payload = { 
-          userToken: userCredential, 
-          action: "getSheetNames" 
-        };
-        
-        const response = await fetch(scriptUrl + `?origin=${encodeURIComponent(window.location.origin)}`, {
-          method: "POST",
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload),
-          redirect: "follow"
-        });
-        const data = await response.json();
-
-        if (data.ok) {
-          availableSheets = data.sheetNames;
-          
           // Extract available dates from sheet names
           extractAvailableDates();
           setupDateLimits();
 
-          const resultDiv = document.getElementById("result");
           resultDiv.className = "success";
           resultDiv.textContent = "✅ Access verified! Found " + availableSheets.length + " sheets.";
 
           // Hide the auth section with smooth transition and show the date selector
           const authSection = document.getElementById("authArea").parentElement;
           authSection.classList.add("fade-out");
-          
+
           setTimeout(() => {
             authSection.style.display = "none";
             const dateSelector = document.getElementById("dateSelector");
             dateSelector.classList.remove("hidden");
             dateSelector.classList.add("fade-in");
           }, 300);
+
+          // Cache the authentication state for faster future loads
+          saveAuthCache();
         } else {
-          throw new Error(data.error || "Failed to get sheet names");
+          throw new Error(data.error || "Access denied");
         }
       } catch (err) {
-        const resultDiv = document.getElementById("result");
         resultDiv.className = "error";
-        resultDiv.textContent = `❌ Error getting sheets: ${err.message}`;
+        resultDiv.innerHTML = `❌ Error initializing session: ${err.message}<br><button class="btn" style="margin-top: 10px;" onclick="initSession()">Retry</button>`;
       }
     }
+
+    // DEPRECATED: getSheetNames replaced by initSession for combined auth + sheet fetching
+    // Keeping for backward compatibility but no longer used in main flow
 
         async function onDateSelected() {
       const selectedDate = document.getElementById("dateInput").value;
