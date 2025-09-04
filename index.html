@@ -1338,12 +1338,46 @@
         return "No data available";
       }
 
-      // Calculate totals
-      const totals = {
+      // Calculate totals first to get lead count
+      const tempTotals = {
         noResponse: Object.values(processedData.noResponse).reduce((sum, count) => sum + count, 0),
         responses: Object.values(processedData.responses).reduce((sum, records) => sum + records.length, 0),
         stopResponses: Object.values(processedData.stopResponses).reduce((sum, count) => sum + count, 0)
       };
+      const tempTotalLeads = tempTotals.noResponse + tempTotals.responses;
+
+      // Get date information
+      const selectedDate = document.getElementById("dateInput").value;
+      let dateInfo = "";
+      if (selectedDate) {
+        // Format the date nicely for display
+        const dateObj = new Date(selectedDate + 'T00:00:00');
+        const formattedDate = dateObj.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        dateInfo = `📊 Heymarket Campaign Report for ${formattedDate}\n📈 Total Leads: ${tempTotalLeads} | Response Rate: ${tempTotals.responses > 0 ? ((tempTotals.responses / tempTotalLeads) * 100).toFixed(1) : 0}%\n\n`;
+      } else if (availableDates && availableDates.length > 0) {
+        // If no specific date selected but we have available dates, show the range
+        const earliestDate = new Date(availableDates[availableDates.length - 1] + 'T00:00:00');
+        const latestDate = new Date(availableDates[0] + 'T00:00:00');
+        const earliestFormatted = earliestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const latestFormatted = latestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        if (earliestDate.getTime() === latestDate.getTime()) {
+          dateInfo = `📊 Heymarket Campaign Report for ${earliestFormatted}\n📈 Total Leads: ${tempTotalLeads} | Response Rate: ${tempTotals.responses > 0 ? ((tempTotals.responses / tempTotalLeads) * 100).toFixed(1) : 0}%\n\n`;
+        } else {
+          dateInfo = `📊 Heymarket Campaign Report (${earliestFormatted} to ${latestFormatted})\n📈 Total Leads: ${tempTotalLeads} | Response Rate: ${tempTotals.responses > 0 ? ((tempTotals.responses / tempTotalLeads) * 100).toFixed(1) : 0}%\n\n`;
+        }
+      } else {
+        dateInfo = `📊 Heymarket Campaign Report\n📈 Total Leads: ${tempTotalLeads} | Response Rate: ${tempTotals.responses > 0 ? ((tempTotals.responses / tempTotalLeads) * 100).toFixed(1) : 0}%\n\n`;
+      }
+
+      // Use the pre-calculated totals
+      const totals = tempTotals;
+      const totalLeads = tempTotalLeads;
 
       // Convert brands set to array and sort
       const brandList = Array.from(brands).sort();
@@ -1386,7 +1420,7 @@
       const totalRow = `\`| ${totalBrand} | ${totalNoResp} | ${totalResp} | ${totalStop} |\``;
       lines.push(totalRow);
 
-      return lines.join('\n');
+      return dateInfo + lines.join('\n');
     }
 
     function fallbackCopyToClipboard(text) {
